@@ -190,7 +190,7 @@ Object.freeze(sbox4);
 const sboxes = [sbox1, sbox2, sbox3, sbox4];
 Object.freeze(sboxes);
 
-const runden = 10; // Hausnummer! // Anzahl der Runden der Feistel-Chiffre
+let key = new Uint8Array(16); // 128-bit key (16 bytes)
 
 ///////////////////////////////////////////// Helper functions  //////////////////////////////////////////
 
@@ -210,6 +210,7 @@ function in2half(arr64) {
 }
 
 function xor4arrays(a, b) {
+  // a, b: Uint8Array -> returns Uint8Array with length = min(a.length, b.length)
   const len = Math.min(a.length, b.length);
   const out = new Uint8Array(len);
   for (let i = 0; i < len; i++) out[i] = a[i] ^ b[i];
@@ -248,6 +249,15 @@ function knuth(n) {
   return (Math.imul(x, 0x9e3779b1) >>> 30) & 3;
 }
 
+function salt_add(plaintext) {
+  const salt = random(8);
+  return String.fromCharCode(...salt) + plaintext;
+}
+
+function salt_remove(plaintext) {
+  return plaintext.slice(8);
+}
+
 /////////////////////////////////////////  Core Functions  ////////////////////////////////////////
 
 function S_box(box_in) {
@@ -258,7 +268,6 @@ function S_box(box_in) {
   const uint32 =
     (box_in[0] | (box_in[1] << 8) | (box_in[2] << 16) | (box_in[3] << 24)) >>>
     0;
-
   const shuffle = knuth(uint32);
 
   // get substituted bytes (use sboxes lookup) and ...
@@ -283,12 +292,14 @@ function S_box(box_in) {
   return new Uint8Array([b0, b1, b2, b3]);
 }
 
-function feistel(data, decrypt = false, rounds = runden) {
+function feistel(data_in, decrypt = false) {
   // data: Uint8Array(8)
-  // rounds: number of rounds
   // decrypt: false = encrypt, true = decrypt
   // returns Uint8Array(8)
 
+  const rounds = 10;
+
+  let data = xor4arrays(data_in, key.slice(0, 8)); // key mixing before starting
   let { left, right } = in2half(data);
 
   for (let r = 0; r < rounds; r++) {
@@ -302,11 +313,11 @@ function feistel(data, decrypt = false, rounds = runden) {
       right = xor4arrays(right, S_box(left)); // R = R ^ S(L)
     }
   }
-
   const out = new Uint8Array(8);
   out.set(left, 0);
   out.set(right, 4);
-  return out;
+
+  return xor4arrays(out, key.slice(0, 8)); // key mixing after finishing
 }
 
 /////////////////////////////////////////  High-Level Functions  ////////////////////////////////////////
@@ -325,22 +336,6 @@ function encryptstring(str) {
   return output;
 }
 
-/*
-function decrypt2string(encBytes) {
-  const decrypted = new Uint8Array(encBytes.length);
-
-  for (let i = 0; i < encBytes.length; i += 8) {
-    const block = encBytes.slice(i, i + 8);
-    const dec = feistel(block, true);
-    decrypted.set(dec, i);
-  }
-
-  const unpadded = removePKCS7Padding(decrypted);
-  const decoder = new TextDecoder();
-  return decoder.decode(unpadded);
-}
-*/
-
 function decrypt2string(encBytes) {
   const decrypted = new Uint8Array(encBytes.length);
   let feedback = new Uint8Array(8);
@@ -358,25 +353,42 @@ function decrypt2string(encBytes) {
   return decoder.decode(unpadded);
 }
 
+function keygen(plainkey) {
+  // generates a 128-bit key from an 8-byte password string
+
+  let a = encryptstring(plainkey);
+  a = feistel(a.slice(a.length - 8, 8));
+  let b = feistel(a);
+  b = feistel(b);
+  return a + b;
+}
 ////////////////////////////////////////  Main Prog  ////////////////////////////////////////
 
-const plaintext = "abcdefghijkl... ";
+///////////////////////////////////////  Playground  ////////////////////////////////////////
+runden = 10; // Anzahl der Runden der Feistel-Chiffre
+
+const plaintext = "abcdcefh";
+const plainkey = "ABCDEFG";
+
 console.log("Original:", plaintext);
 
+key = keygen(plainkey);
+console.log("Key: ", key);
+
 const salt = random(8);
-const salted = String.fromCharCode(...salt) + plaintext;
+const salted = salt_add(plaintext);
 console.log("Salted:", salted);
 
 const encrypted = encryptstring(salted);
 console.log("Encrypted bytes:", encrypted);
 
 const decrypted = decrypt2string(encrypted);
-const unsalted = decrypted.slice(salt.length);
-console.log("Decrypted:", unsalted);
+console.log("Decrypted (with salt):", decrypted);
+
+const unsalted = salt_remove(decrypted);
+console.log("Decrypted and unsalted:", unsalted);
 
 /* Kernalgorithmus funktioniert so weit. Fehlt noch:
-- ein wichtiges Detail: Der Schlüssel!
+- Schlüssel implementiert, aber zunächst nur ein kurzer und ohne key-scheduling
 - achja und dit html-Dingens mit de Knöppe
 */
-
-/////////////////////////////////////  Playground  ////////////////////////////////////////
