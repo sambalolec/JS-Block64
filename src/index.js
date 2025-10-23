@@ -200,27 +200,24 @@ function ror(value, shift) {
 }
 
 function in2half(arr64) {
-  // arr64: Uint8Array(8) -> returns two Uint8Array(4)
   return {
-    left: arr64.slice(0, 4),
-    right: arr64.slice(4, 8),
+    left: arr64.subarray(0, 4),
+    right: arr64.subarray(4, 8),
   };
 }
 
-function xor4arrays(a, b) {
-  // a, b: Uint8Array -> returns Uint8Array with length = min(a.length, b.length)
+function xor4arrays(a, b, outArray) {
   const len = Math.min(a.length, b.length);
-  const out = new Uint8Array(len);
-  for (let i = 0; i < len; i++) out[i] = a[i] ^ b[i];
-  return out;
+  for (let i = 0; i < len; i++) outArray[i] = a[i] ^ b[i];
+  return outArray;
 }
 
-function string2arrayPKCS7(str) {
-  // returns Uint8Array with PKCS#7 padding to multiple of 8 bytes
-  const blockSize = 8;
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(str);
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
+function string2arrayPKCS7(str) {
+  const blockSize = 8;
+  const bytes = encoder.encode(str);
   const remainder = bytes.length % blockSize;
   const padding = remainder === 0 ? blockSize : blockSize - remainder;
 
@@ -231,9 +228,8 @@ function string2arrayPKCS7(str) {
 }
 
 function removePKCS7Padding(arr) {
-  // arr: Uint8Array with PKCS#7 padding -> returns Uint8Array without padding
   const pad = arr[arr.length - 1];
-  return arr.slice(0, arr.length - pad);
+  return arr.subarray(0, arr.length - pad);
 }
 
 function random(n) {
@@ -253,85 +249,81 @@ function salt_add(plaintext) {
 }
 
 function salt_remove(plaintext) {
-  return plaintext.slice(8);
+  return plaintext.subarray ? plaintext.subarray(8) : plaintext.slice(8);
 }
 
 /////////////////////////////////////////  Core Functions  ////////////////////////////////////////
 
 function S_box(box_in) {
-  // box_in: Uint8Array(4)
-  // returns Uint8Array(4)
-
-  // determine shuffle value (0..3) using Knuth's multiplicative hash
   const uint32 =
     (box_in[0] | (box_in[1] << 8) | (box_in[2] << 16) | (box_in[3] << 24)) >>>
     0;
   const shuffle = knuth(uint32);
 
-  // get substituted bytes (use sboxes lookup) and ...
   const v0 = sboxes[0 ^ shuffle][box_in[0]] & 0xff;
   const v1 = sboxes[1 ^ shuffle][box_in[1]] & 0xff;
   const v2 = sboxes[2 ^ shuffle][box_in[2]] & 0xff;
   const v3 = sboxes[3 ^ shuffle][box_in[3]] & 0xff;
 
-  // ... merge them into one 32-bit word
   const zwischen0 = (v0 | (v1 << 8) | (v2 << 16) | (v3 << 24)) >>> 0;
-  const zwischen1 = rol(zwischen0, 10); // Hausnummer!, alternativ 7, 13 probieren. Anm.: Für Analyse shuffle =0 fixieren
-  const zwischen2 = ror(zwischen0, 11); // Hausnummer!, alternativ 19, 17 probieren. Anm.: Für Analyse shuffle =0 fixieren
-  const kombi = (zwischen0 + zwischen1 + zwischen2) >>> 0;
+  const kombi = (zwischen0 + rol(zwischen0, 10) + ror(zwischen0, 11)) >>> 0;
 
-  // extract 4 bytes (little-endian style, matching earlier shifts)
-  const b0 = (kombi & 0xff) >>> 0;
-  const b1 = ((kombi >>> 8) & 0xff) >>> 0;
-  const b2 = ((kombi >>> 16) & 0xff) >>> 0;
-  const b3 = ((kombi >>> 24) & 0xff) >>> 0;
-
-  return new Uint8Array([b0, b1, b2, b3]);
+  return new Uint8Array([
+    (kombi & 0xff) >>> 0,
+    ((kombi >>> 8) & 0xff) >>> 0,
+    ((kombi >>> 16) & 0xff) >>> 0,
+    ((kombi >>> 24) & 0xff) >>> 0,
+  ]);
 }
 
-let global_key = new Uint8Array(8); // 64-bit key (8 bytes)
-function update_key(key) {
-  // state: Uint8Array[8] (little-endian)
+let global_key = new Uint8Array(8);
+
+function update_key_inplace(key) {
   let x = 0n;
   for (let i = 0; i < 8; i++) x |= BigInt(key[i]) << (8n * BigInt(i));
-
-  // Xorshift64* step
   x ^= x >> 12n;
   x ^= (x << 25n) & 0xffffffffffffffffn;
   x ^= x >> 27n;
   x = (x * 2685821657736338717n) & 0xffffffffffffffffn;
-
-  // write back in-place
   for (let i = 0; i < 8; i++) key[i] = Number((x >> (8n * BigInt(i))) & 0xffn);
   return key;
 }
 
 function feistel(data_in, decrypt = false) {
-  // data: Uint8Array(8)
-  // decrypt: false = encrypt, true = decrypt
-  // returns Uint8Array(8)
-
   const rounds = 10;
+  update_key_inplace(global_key);
 
-  global_key = update_key(global_key); // change key for each block processed
-  let data = xor4arrays(data_in, global_key); // key mixing before starting
+  const data = new Uint8Array(8);
+  xor4arrays(data_in, global_key, data);
 
-  let { left, right } = in2half(data);
+  const left = new Uint8Array(data.subarray(0, 4));
+  const right = new Uint8Array(data.subarray(4, 8));
+  const tmpLeft = new Uint8Array(4);
+  const tmpRight = new Uint8Array(4);
+
   for (let r = 0; r < rounds; r++) {
     if (!decrypt) {
-      // Verschlüsselungsreihenfolge (normal)
-      right = xor4arrays(right, S_box(left)); // R = R ^ S(L)
-      left = xor4arrays(left, S_box(right)); // L = L ^ S(R)
+      xor4arrays(right, S_box(left), tmpRight);
+      xor4arrays(left, S_box(tmpRight), tmpLeft);
     } else {
-      // Entschlüsselungsreihenfolge (reverse)
-      left = xor4arrays(left, S_box(right)); // L = L ^ S(R)
-      right = xor4arrays(right, S_box(left)); // R = R ^ S(L)
+      xor4arrays(left, S_box(right), tmpLeft);
+      xor4arrays(right, S_box(tmpLeft), tmpRight);
+    }
+
+    for (let i = 0; i < 4; i++) {
+      const t = left[i];
+      left[i] = tmpLeft[i];
+      tmpLeft[i] = t;
+      const t2 = right[i];
+      right[i] = tmpRight[i];
+      tmpRight[i] = t2;
     }
   }
+
   const out = new Uint8Array(8);
   out.set(left, 0);
   out.set(right, 4);
-  return xor4arrays(out, global_key); // key mixing after finishing
+  return xor4arrays(out, global_key, out);
 }
 
 /////////////////////////////////////////  High-Level Functions  ////////////////////////////////////////
@@ -339,59 +331,69 @@ function feistel(data_in, decrypt = false) {
 function encryptstring(str) {
   const bytes = string2arrayPKCS7(str);
   const output = new Uint8Array(bytes.length);
-  let feedback = new Uint8Array(8);
+  const feedback = new Uint8Array(8);
+  const block = new Uint8Array(8);
 
   for (let i = 0; i < bytes.length; i += 8) {
-    const block = bytes.slice(i, i + 8);
-    const enc = feistel(xor4arrays(block, feedback), false);
-    feedback = enc;
-    output.set(enc, i);
+    const sub = bytes.subarray(i, i + 8);
+    for (let j = 0; j < 8; j++) block[j] = sub[j] ^ feedback[j];
+
+    const enc = feistel(block, false);
+    for (let j = 0; j < 8; j++) {
+      feedback[j] = enc[j];
+      output[i + j] = enc[j];
+    }
   }
   return output;
 }
 
 function decrypt2string(encBytes) {
   const decrypted = new Uint8Array(encBytes.length);
-  let feedback = new Uint8Array(8);
+  const feedback = new Uint8Array(8);
+  const block = new Uint8Array(8);
 
   for (let i = 0; i < encBytes.length; i += 8) {
-    const block = encBytes.slice(i, i + 8);
+    const sub = encBytes.subarray(i, i + 8);
+    for (let j = 0; j < 8; j++) block[j] = sub[j];
+
     const tmp = feistel(block, true);
-    const dec = xor4arrays(tmp, feedback);
-    decrypted.set(dec, i);
-    feedback = block;
+
+    for (let j = 0; j < 8; j++) {
+      const val = tmp[j] ^ feedback[j];
+      decrypted[i + j] = val;
+      feedback[j] = block[j];
+    }
   }
   const unpadded = removePKCS7Padding(decrypted);
-  const decoder = new TextDecoder();
   return decoder.decode(unpadded);
 }
 
 function keygen(keystring) {
-  global_key = [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f]; // 1/Pi
-  let newkey = encryptstring(keystring);
-  global_key = feistel(newkey.slice(newkey.length - 8, 8));
-  return;
-}
-////////////////////////////////////////  Main Prog  ////////////////////////////////////////
+  const initKey = [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f];
+  for (let i = 0; i < 8; i++) global_key[i] = initKey[i];
 
-///////////////////////////////////////  Playground  ////////////////////////////////////////
-runden = 10; // Anzahl der Runden der Feistel-Chiffre
+  const newkey = encryptstring(keystring);
+  let subkey = newkey.subarray(newkey.length - 8);
+  subkey = feistel(subkey);
+  for (let i = 0; i < 8; i++) global_key[i] = subkey[i];
+}
+
+////////////////////////////////////////  Main Prog  ////////////////////////////////////////
 
 const plaintext = "abcdcefgh";
 const plainkey = "ABCDEFG";
 
 console.log("Original:", plaintext);
-const salt = random(8);
 const salted = salt_add(plaintext);
 console.log("Salted:", salted);
 
 keygen(plainkey);
-console.log("Key 1: ", global_key);
+console.log("Key ->: ", global_key);
 const encrypted = encryptstring(salted);
 console.log("Encrypted bytes:", encrypted);
 
 keygen(plainkey);
-console.log("Key 2: ", global_key);
+console.log("Key <-: ", global_key);
 const decrypted = decrypt2string(encrypted);
 console.log("Decrypted (with salt):", decrypted);
 
