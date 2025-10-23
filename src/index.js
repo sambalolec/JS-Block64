@@ -190,8 +190,6 @@ Object.freeze(sbox4);
 const sboxes = [sbox1, sbox2, sbox3, sbox4];
 Object.freeze(sboxes);
 
-let key = new Uint8Array(16); // 128-bit key (16 bytes)
-
 ///////////////////////////////////////////// Helper functions  //////////////////////////////////////////
 
 function rol(value, shift) {
@@ -278,7 +276,6 @@ function S_box(box_in) {
 
   // ... merge them into one 32-bit word
   const zwischen0 = (v0 | (v1 << 8) | (v2 << 16) | (v3 << 24)) >>> 0;
-
   const zwischen1 = rol(zwischen0, 10); // Hausnummer!, alternativ 7, 13 probieren. Anm.: Für Analyse shuffle =0 fixieren
   const zwischen2 = ror(zwischen0, 11); // Hausnummer!, alternativ 19, 17 probieren. Anm.: Für Analyse shuffle =0 fixieren
   const kombi = (zwischen0 + zwischen1 + zwischen2) >>> 0;
@@ -292,6 +289,23 @@ function S_box(box_in) {
   return new Uint8Array([b0, b1, b2, b3]);
 }
 
+let global_key = new Uint8Array(8); // 64-bit key (8 bytes)
+function update_key(key) {
+  // state: Uint8Array[8] (little-endian)
+  let x = 0n;
+  for (let i = 0; i < 8; i++) x |= BigInt(key[i]) << (8n * BigInt(i));
+
+  // Xorshift64* step
+  x ^= x >> 12n;
+  x ^= (x << 25n) & 0xffffffffffffffffn;
+  x ^= x >> 27n;
+  x = (x * 2685821657736338717n) & 0xffffffffffffffffn;
+
+  // write back in-place
+  for (let i = 0; i < 8; i++) key[i] = Number((x >> (8n * BigInt(i))) & 0xffn);
+  return key;
+}
+
 function feistel(data_in, decrypt = false) {
   // data: Uint8Array(8)
   // decrypt: false = encrypt, true = decrypt
@@ -299,9 +313,10 @@ function feistel(data_in, decrypt = false) {
 
   const rounds = 10;
 
-  let data = xor4arrays(data_in, key.slice(0, 8)); // key mixing before starting
-  let { left, right } = in2half(data);
+  global_key = update_key(global_key); // change key for each block processed
+  let data = xor4arrays(data_in, global_key); // key mixing before starting
 
+  let { left, right } = in2half(data);
   for (let r = 0; r < rounds; r++) {
     if (!decrypt) {
       // Verschlüsselungsreihenfolge (normal)
@@ -316,8 +331,7 @@ function feistel(data_in, decrypt = false) {
   const out = new Uint8Array(8);
   out.set(left, 0);
   out.set(right, 4);
-
-  return xor4arrays(out, key.slice(0, 8)); // key mixing after finishing
+  return xor4arrays(out, global_key); // key mixing after finishing
 }
 
 /////////////////////////////////////////  High-Level Functions  ////////////////////////////////////////
@@ -347,48 +361,46 @@ function decrypt2string(encBytes) {
     decrypted.set(dec, i);
     feedback = block;
   }
-
   const unpadded = removePKCS7Padding(decrypted);
   const decoder = new TextDecoder();
   return decoder.decode(unpadded);
 }
 
-function keygen(plainkey) {
-  // generates a 128-bit key from an 8-byte password string
-
-  let a = encryptstring(plainkey);
-  a = feistel(a.slice(a.length - 8, 8));
-  let b = feistel(a);
-  b = feistel(b);
-  return a + b;
+function keygen(keystring) {
+  global_key = [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f]; // 1/Pi
+  let newkey = encryptstring(keystring);
+  global_key = feistel(newkey.slice(newkey.length - 8, 8));
+  return;
 }
 ////////////////////////////////////////  Main Prog  ////////////////////////////////////////
 
 ///////////////////////////////////////  Playground  ////////////////////////////////////////
 runden = 10; // Anzahl der Runden der Feistel-Chiffre
 
-const plaintext = "abcdcefh";
+const plaintext = "abcdcefgh";
 const plainkey = "ABCDEFG";
 
 console.log("Original:", plaintext);
-
-key = keygen(plainkey);
-console.log("Key: ", key);
-
 const salt = random(8);
 const salted = salt_add(plaintext);
 console.log("Salted:", salted);
 
+keygen(plainkey);
+console.log("Key 1: ", global_key);
 const encrypted = encryptstring(salted);
 console.log("Encrypted bytes:", encrypted);
 
+keygen(plainkey);
+console.log("Key 2: ", global_key);
 const decrypted = decrypt2string(encrypted);
 console.log("Decrypted (with salt):", decrypted);
 
 const unsalted = salt_remove(decrypted);
 console.log("Decrypted and unsalted:", unsalted);
 
-/* Kernalgorithmus funktioniert so weit. Fehlt noch:
-- Schlüssel implementiert, aber zunächst nur ein kurzer und ohne key-scheduling
-- achja und dit html-Dingens mit de Knöppe
+/* Kernalgorithmus funktioniert so weit. 
+  Schlüssel fertig. Jetzt auf 64 Bit festglegt und Neuberechnung vor jedem Block.
+  Fehlt noch:
+  - Code nochmal durchsehen, aufräumen und schöner machen
+  - dit html-Dingens mit de Knöppe aka "Main Prog"
 */
