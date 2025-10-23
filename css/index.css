@@ -1,0 +1,54 @@
+/* Allgemeines Layout */
+body {
+  font-family: system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 100vh;
+  margin: 2rem;
+  background: #f9f9f9;
+  color: #222;
+}
+
+/* Eingabefelder */
+input {
+  width: 90%;
+  max-width: 600px;
+  padding: 0.6rem;
+  margin: 0.5rem 0;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+/* Button */
+button {
+  margin-top: 0.8rem;
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  background-color: #0078d7;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+button:hover {
+  background-color: #005fa3;
+}
+
+/* Ausgabefeld */
+pre {
+  width: 90%;
+  max-width: 600px;
+  margin-top: 1.5rem;
+  background: #222;
+  color: #0f0;
+  padding: 1rem;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}

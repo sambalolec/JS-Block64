@@ -258,6 +258,7 @@ function salt_remove(plaintext) {
 const key = {
   value: [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f],
   generate(passphrase) {
+    key.value = [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f];
     const newkey = encryptstring(passphrase);
     let subkey = newkey.subarray(newkey.length - 8);
     subkey = feistel(subkey);
@@ -272,7 +273,6 @@ const key = {
     x = (x * 2685821657736338717n) & 0xffffffffffffffffn;
     for (let i = 0; i < 8; i++)
       this.value[i] = Number((x >> (8n * BigInt(i))) & 0xffn);
-    // return key;
   },
 };
 
@@ -379,31 +379,46 @@ function decrypt2string(encBytes) {
 
 ////////////////////////////////////////  Main Prog  ////////////////////////////////////////
 
-const plaintext = "abcdcefgh";
-const plainkey = "ABCDEFG";
+const outputEl = document.getElementById("output");
 
-console.log("Original:", plaintext);
-const salted = salt_add(plaintext);
-console.log("Salted:", salted);
+// support function to log to both console and output element
+function log(...args) {
+  console.log(...args);
+  outputEl.textContent += args.join(" ") + "\n";
+}
 
-key.generate(plainkey);
-const save_key = key.value.slice();
+//+ Button
 
-console.log("Key ->: ", key.value);
-const encrypted = encryptstring(salted);
-console.log("Encrypted bytes:", encrypted);
+document.getElementById("runBtn").addEventListener("click", () => {
+  outputEl.textContent = ""; // Vor jedem Lauf resetten
 
-key.value = save_key.slice();
-console.log("Key <-: ", key.value);
-const decrypted = decrypt2string(encrypted);
-console.log("Decrypted (with salt):", decrypted);
+  // get input values
+  const plaintext = document.getElementById("plaintext").value;
+  const plainkey = document.getElementById("plainkey").value;
 
-const unsalted = salt_remove(decrypted);
-console.log("Decrypted and unsalted:", unsalted);
+  // --- Hauptprogramm ---
+  log("Original:", plaintext);
+  const salted = salt_add(plaintext);
+  log("Salted:", salted);
 
-/* Kernalgorithmus funktioniert so weit. 
-  S-Boxen wurden von ChatGPT optimiert, aber da geht vielleicht noch was 
+  key.generate(plainkey);
+  log("Key ->: ", key.value);
+  const encrypted = encryptstring(salted);
+  log("Encrypted bytes:", encrypted);
+
+  key.generate(plainkey);
+  log("Key <-: ", key.value);
+  const decrypted = decrypt2string(encrypted);
+  log("Decrypted (with salt):", decrypted);
+
+  const unsalted = salt_remove(decrypted);
+  log("Decrypted and unsalted:", unsalted);
+});
+
+///////////////////////////////////////////  Bastelarea  ///////////////////////////////////////////
+
+/* 
   Fehlt noch:
   - neu durchkommentieren (lassen?)
-  - dit html-Dingens mit de Knöppe aka "Main Prog"
+  
 */
