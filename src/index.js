@@ -255,6 +255,27 @@ function salt_remove(plaintext) {
 
 /////////////////////////////////////////  Core Functions  ////////////////////////////////////////
 
+const key = {
+  value: [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f],
+  generate(passphrase) {
+    const newkey = encryptstring(passphrase);
+    let subkey = newkey.subarray(newkey.length - 8);
+    subkey = feistel(subkey);
+    for (let i = 0; i < 8; i++) this.value[i] = subkey[i];
+  },
+  update() {
+    let x = 0n;
+    for (let i = 0; i < 8; i++) x |= BigInt(this.value[i]) << (8n * BigInt(i));
+    x ^= x >> 12n;
+    x ^= (x << 25n) & 0xffffffffffffffffn;
+    x ^= x >> 27n;
+    x = (x * 2685821657736338717n) & 0xffffffffffffffffn;
+    for (let i = 0; i < 8; i++)
+      this.value[i] = Number((x >> (8n * BigInt(i))) & 0xffn);
+    // return key;
+  },
+};
+
 function S_box(box_in) {
   const uint32 =
     (box_in[0] | (box_in[1] << 8) | (box_in[2] << 16) | (box_in[3] << 24)) >>>
@@ -277,25 +298,12 @@ function S_box(box_in) {
   ]);
 }
 
-let global_key = new Uint8Array(8);
-
-function update_key_inplace(key) {
-  let x = 0n;
-  for (let i = 0; i < 8; i++) x |= BigInt(key[i]) << (8n * BigInt(i));
-  x ^= x >> 12n;
-  x ^= (x << 25n) & 0xffffffffffffffffn;
-  x ^= x >> 27n;
-  x = (x * 2685821657736338717n) & 0xffffffffffffffffn;
-  for (let i = 0; i < 8; i++) key[i] = Number((x >> (8n * BigInt(i))) & 0xffn);
-  return key;
-}
-
 function feistel(data_in, decrypt = false) {
   const rounds = 10;
-  update_key_inplace(global_key);
+  key.update();
 
   const data = new Uint8Array(8);
-  xor4arrays(data_in, global_key, data);
+  xor4arrays(data_in, key.value, data);
 
   const left = new Uint8Array(data.subarray(0, 4));
   const right = new Uint8Array(data.subarray(4, 8));
@@ -324,7 +332,7 @@ function feistel(data_in, decrypt = false) {
   const out = new Uint8Array(8);
   out.set(left, 0);
   out.set(right, 4);
-  return xor4arrays(out, global_key, out);
+  return xor4arrays(out, key.value, out);
 }
 
 /////////////////////////////////////////  High-Level Functions  ////////////////////////////////////////
@@ -369,16 +377,6 @@ function decrypt2string(encBytes) {
   return decoder.decode(unpadded);
 }
 
-function keygen(keystring) {
-  const initKey = [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f];
-  for (let i = 0; i < 8; i++) global_key[i] = initKey[i];
-
-  const newkey = encryptstring(keystring);
-  let subkey = newkey.subarray(newkey.length - 8);
-  subkey = feistel(subkey);
-  for (let i = 0; i < 8; i++) global_key[i] = subkey[i];
-}
-
 ////////////////////////////////////////  Main Prog  ////////////////////////////////////////
 
 const plaintext = "abcdcefgh";
@@ -388,13 +386,15 @@ console.log("Original:", plaintext);
 const salted = salt_add(plaintext);
 console.log("Salted:", salted);
 
-keygen(plainkey);
-console.log("Key ->: ", global_key);
+key.generate(plainkey);
+const save_key = key.value.slice();
+
+console.log("Key ->: ", key.value);
 const encrypted = encryptstring(salted);
 console.log("Encrypted bytes:", encrypted);
 
-keygen(plainkey);
-console.log("Key <-: ", global_key);
+key.value = save_key.slice();
+console.log("Key <-: ", key.value);
 const decrypted = decrypt2string(encrypted);
 console.log("Decrypted (with salt):", decrypted);
 
