@@ -200,38 +200,31 @@ function ror(value, shift) {
   return ((value >>> shift) | (value << (32 - shift))) >>> 0;
 }
 
-function in2half(arr64) {
-  return {
-    left: arr64.subarray(0, 4),
-    right: arr64.subarray(4, 8),
-  };
-}
-
-function xor4arrays(a, b, outArray) {
+function xor(a, b, outArray = []) {
   const len = Math.min(a.length, b.length);
   for (let i = 0; i < len; i++) outArray[i] = a[i] ^ b[i];
   return outArray;
 }
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
+const PKCS7Padding = {
+  add(str) {
+    const blockSize = 8;
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(str);
+    const remainder = bytes.length % blockSize;
+    const padding = remainder === 0 ? blockSize : blockSize - remainder;
 
-function string2arrayPKCS7(str) {
-  const blockSize = 8;
-  const bytes = encoder.encode(str);
-  const remainder = bytes.length % blockSize;
-  const padding = remainder === 0 ? blockSize : blockSize - remainder;
+    const padded = new Uint8Array(bytes.length + padding);
+    padded.set(bytes);
+    padded.fill(padding, bytes.length);
+    return padded;
+  },
 
-  const padded = new Uint8Array(bytes.length + padding);
-  padded.set(bytes);
-  padded.fill(padding, bytes.length);
-  return padded;
-}
-
-function removePKCS7Padding(arr) {
-  const pad = arr[arr.length - 1];
-  return arr.subarray(0, arr.length - pad);
-}
+  remove(arr) {
+    const pad = arr[arr.length - 1];
+    return arr.subarray(0, arr.length - pad);
+  },
+};
 
 function random(n) {
   const trash = new Uint8Array(n);
@@ -244,22 +237,12 @@ function knuth(n) {
   return (Math.imul(x, 0x9e3779b1) >>> 30) & 3;
 }
 
-function salt_add(plaintext) {
-  const salt = random(8);
-  return String.fromCharCode(...salt) + plaintext;
-}
-
-function salt_remove(plaintext) {
-  return plaintext.subarray ? plaintext.subarray(8) : plaintext.slice(8);
-}
-
 /////////////////////////////////////////  Core Functions  ////////////////////////////////////////
 
 const key = {
-  value: [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f],
   generate(passphrase) {
-    key.value = [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f];
-    const newkey = encryptstring(passphrase);
+    this.value = [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f];
+    const newkey = encryptString(passphrase);
     let subkey = newkey.subarray(newkey.length - 8);
     subkey = feistel(subkey);
     for (let i = 0; i < 8; i++) this.value[i] = subkey[i];
@@ -287,58 +270,46 @@ function S_box(box_in) {
   const v2 = sboxes[2 ^ shuffle][box_in[2]] & 0xff;
   const v3 = sboxes[3 ^ shuffle][box_in[3]] & 0xff;
 
-  const zwischen0 = (v0 | (v1 << 8) | (v2 << 16) | (v3 << 24)) >>> 0;
-  const kombi = (zwischen0 + rol(zwischen0, 10) + ror(zwischen0, 11)) >>> 0;
+  const tmp = (v0 | (v1 << 8) | (v2 << 16) | (v3 << 24)) >>> 0;
+  const merged = (tmp + rol(tmp, 10) + ror(tmp, 11)) >>> 0;
 
   return new Uint8Array([
-    (kombi & 0xff) >>> 0,
-    ((kombi >>> 8) & 0xff) >>> 0,
-    ((kombi >>> 16) & 0xff) >>> 0,
-    ((kombi >>> 24) & 0xff) >>> 0,
+    (merged & 0xff) >>> 0,
+    ((merged >>> 8) & 0xff) >>> 0,
+    ((merged >>> 16) & 0xff) >>> 0,
+    ((merged >>> 24) & 0xff) >>> 0,
   ]);
 }
 
-function feistel(data_in, decrypt = false) {
+function feistel(block, decrypt = false) {
   const rounds = 10;
+
   key.update();
-
-  const data = new Uint8Array(8);
-  xor4arrays(data_in, key.value, data);
-
-  const left = new Uint8Array(data.subarray(0, 4));
-  const right = new Uint8Array(data.subarray(4, 8));
-  const tmpLeft = new Uint8Array(4);
-  const tmpRight = new Uint8Array(4);
+  const data = new Uint8Array(xor(block, key.value));
+  let left = new Uint8Array(data.subarray(0, 4));
+  let right = new Uint8Array(data.subarray(4, 8));
 
   for (let r = 0; r < rounds; r++) {
     if (!decrypt) {
-      xor4arrays(right, S_box(left), tmpRight);
-      xor4arrays(left, S_box(tmpRight), tmpLeft);
+      // Verschlüsselungsreihenfolge (normal)
+      right = xor(right, S_box(left));
+      left = xor(left, S_box(right));
     } else {
-      xor4arrays(left, S_box(right), tmpLeft);
-      xor4arrays(right, S_box(tmpLeft), tmpRight);
-    }
-
-    for (let i = 0; i < 4; i++) {
-      const t = left[i];
-      left[i] = tmpLeft[i];
-      tmpLeft[i] = t;
-      const t2 = right[i];
-      right[i] = tmpRight[i];
-      tmpRight[i] = t2;
+      // Entschlüsselungsreihenfolge (reverse)
+      left = xor(left, S_box(right));
+      right = xor(right, S_box(left));
     }
   }
-
   const out = new Uint8Array(8);
   out.set(left, 0);
   out.set(right, 4);
-  return xor4arrays(out, key.value, out);
+  return xor(out, key.value);
 }
 
-/////////////////////////////////////////  High-Level Functions  ////////////////////////////////////////
+/////////////////////////////////////////  High-LevelFunctions  ////////////////////////////////////////
 
-function encryptstring(str) {
-  const bytes = string2arrayPKCS7(str);
+function encryptString(str) {
+  const bytes = PKCS7Padding.add(str);
   const output = new Uint8Array(bytes.length);
   const feedback = new Uint8Array(8);
   const block = new Uint8Array(8);
@@ -356,10 +327,11 @@ function encryptstring(str) {
   return output;
 }
 
-function decrypt2string(encBytes) {
+function decryptToString(encBytes) {
   const decrypted = new Uint8Array(encBytes.length);
   const feedback = new Uint8Array(8);
   const block = new Uint8Array(8);
+  const decoder = new TextDecoder();
 
   for (let i = 0; i < encBytes.length; i += 8) {
     const sub = encBytes.subarray(i, i + 8);
@@ -373,9 +345,31 @@ function decrypt2string(encBytes) {
       feedback[j] = block[j];
     }
   }
-  const unpadded = removePKCS7Padding(decrypted);
+  const unpadded = PKCS7Padding.remove(decrypted);
   return decoder.decode(unpadded);
 }
+
+const dataString = {
+  plaintext: "",
+  chiffre: [],
+  iscrypted: false,
+  crypt() {
+    this.chiffre = encryptString(this.plaintext);
+    this.iscrypted = true;
+  },
+  decrypt() {
+    this.plaintext = decryptToString(this.chiffre);
+    this.iscrypted = false;
+  },
+  salt() {
+    this.plaintext = String.fromCharCode(...random(8)) + this.plaintext;
+  },
+  unsalt() {
+    this.plaintext = this.plaintext.subarray
+      ? this.plaintext.subarray(8)
+      : this.plaintext.slice(8);
+  },
+};
 
 ////////////////////////////////////////  Main Prog  ////////////////////////////////////////
 
@@ -393,32 +387,32 @@ document.getElementById("runBtn").addEventListener("click", () => {
   outputEl.textContent = ""; // Vor jedem Lauf resetten
 
   // get input values
-  const plaintext = document.getElementById("plaintext").value;
+
+  dataString.plaintext = document.getElementById("plaintext").value;
   const plainkey = document.getElementById("plainkey").value;
 
   // --- Hauptprogramm ---
-  log("Original:", plaintext);
-  const salted = salt_add(plaintext);
-  log("Salted:", salted);
-
+  log("Original:", dataString.plaintext);
+  dataString.salt();
+  log("Salted:", dataString.plaintext);
   key.generate(plainkey);
   log("Key ->: ", key.value);
-  const encrypted = encryptstring(salted);
-  log("Encrypted bytes:", encrypted);
-
+  dataString.crypt();
+  log("Encrypted bytes:", dataString.chiffre);
   key.generate(plainkey);
   log("Key <-: ", key.value);
-  const decrypted = decrypt2string(encrypted);
-  log("Decrypted (with salt):", decrypted);
-
-  const unsalted = salt_remove(decrypted);
-  log("Decrypted and unsalted:", unsalted);
+  dataString.decrypt();
+  log("Decrypted (with salt):", dataString.plaintext);
+  dataString.unsalt();
+  log("Decrypted and unsalted:", dataString.plaintext);
 });
 
 ///////////////////////////////////////////  Bastelarea  ///////////////////////////////////////////
 
 /* 
   Fehlt noch:
+  - Code aufräumen und verschönern
   - neu durchkommentieren (lassen?)
+  - irgendwas geiles
   
 */
