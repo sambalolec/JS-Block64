@@ -1,3 +1,5 @@
+//**************************************  Global Const  **************************************//
+
 /* S-Boxen optimiert (Maximin nonlinearity) mit erweiterten Nachbarschaftsoperationen */
 /* Generated: Thu Oct 23 07:40:27 2025, elapsed 55.00s, best_obj 106.0 */
 const sbox1 = [
@@ -191,7 +193,7 @@ Object.freeze(sbox4);
 const sboxes = [sbox1, sbox2, sbox3, sbox4];
 Object.freeze(sboxes);
 
-///////////////////////////////////////////// Helper functions  //////////////////////////////////////////
+//**************************************  Utility Functions  **************************************//
 
 function rol(value, shift) {
   return ((value << shift) | (value >>> (32 - shift))) >>> 0;
@@ -206,6 +208,7 @@ function xor(a, b, outArray = []) {
   return outArray;
 }
 
+// PKCS#7 Padding for block size of 8 bytes
 const PKCS7Padding = {
   add(str) {
     const blockSize = 8;
@@ -237,11 +240,12 @@ function knuth(n) {
   return (Math.imul(x, 0x9e3779b1) >>> 30) & 3;
 }
 
-/////////////////////////////////////////  Core Functions  ////////////////////////////////////////
+//**************************************  Core Functions  **************************************//
 
+// Key schedule and update
 const key = {
   generate(passphrase) {
-    this.value = [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f];
+    this.value = [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f]; //  1/Pi
     const newkey = encryptString(passphrase);
     let subkey = newkey.subarray(newkey.length - 8);
     subkey = feistel(subkey);
@@ -259,12 +263,13 @@ const key = {
   },
 };
 
+// S-Box transformation
 function S_box(box_in) {
   const uint32 =
     (box_in[0] | (box_in[1] << 8) | (box_in[2] << 16) | (box_in[3] << 24)) >>>
     0;
-  const shuffle = knuth(uint32);
 
+  const shuffle = knuth(uint32);
   const v0 = sboxes[0 ^ shuffle][box_in[0]] & 0xff;
   const v1 = sboxes[1 ^ shuffle][box_in[1]] & 0xff;
   const v2 = sboxes[2 ^ shuffle][box_in[2]] & 0xff;
@@ -281,6 +286,7 @@ function S_box(box_in) {
   ]);
 }
 
+// Feistel network function
 function feistel(block, decrypt = false) {
   const rounds = 10;
 
@@ -306,8 +312,9 @@ function feistel(block, decrypt = false) {
   return xor(out, key.value);
 }
 
-/////////////////////////////////////////  High-LevelFunctions  ////////////////////////////////////////
+//**************************************  High-Level Functions  **************************************//
 
+// Encrypt and Decrypt functions with CBC mode
 function encryptString(str) {
   const bytes = PKCS7Padding.add(str);
   const output = new Uint8Array(bytes.length);
@@ -349,6 +356,7 @@ function decryptToString(encBytes) {
   return decoder.decode(unpadded);
 }
 
+// Data structure to hold plaintext, ciphertext and state
 const dataString = {
   plaintext: "",
   chiffre: [],
@@ -371,7 +379,7 @@ const dataString = {
   },
 };
 
-////////////////////////////////////////  Main Prog  ////////////////////////////////////////
+//**************************************  UI and Interaction  **************************************//
 
 const outputEl = document.getElementById("output");
 
@@ -381,13 +389,11 @@ function log(...args) {
   outputEl.textContent += args.join(" ") + "\n";
 }
 
-//+ Button
-
+// Event listener for the "Run" button
 document.getElementById("runBtn").addEventListener("click", () => {
   outputEl.textContent = ""; // Vor jedem Lauf resetten
 
-  // get input values
-
+  // --- Eingaben einlesen ---
   dataString.plaintext = document.getElementById("plaintext").value;
   const plainkey = document.getElementById("plainkey").value;
 
@@ -407,7 +413,7 @@ document.getElementById("runBtn").addEventListener("click", () => {
   log("Decrypted and unsalted:", dataString.plaintext);
 });
 
-///////////////////////////////////////////  Bastelarea  ///////////////////////////////////////////
+//**************************************  To Do List  **************************************//
 
 /* 
   Fehlt noch:
