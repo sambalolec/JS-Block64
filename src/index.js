@@ -195,189 +195,212 @@ Object.freeze(sboxes);
 
 //**************************************  Utility Functions  **************************************//
 
-function rol(value, shift) {
+function rol32(value, shift) {
   return ((value << shift) | (value >>> (32 - shift))) >>> 0;
 }
-function ror(value, shift) {
+function ror32(value, shift) {
   return ((value >>> shift) | (value << (32 - shift))) >>> 0;
 }
 
-function xor(a, b, outArray = []) {
-  const len = Math.min(a.length, b.length);
-  for (let i = 0; i < len; i++) outArray[i] = a[i] ^ b[i];
-  return outArray;
+function random64() {
+  const arr = new Uint32Array(2);
+  crypto.getRandomValues(arr);
+  let rand = 0n;
+  for (const word of arr) {
+    rand = (rand << 32n) + BigInt(word);
+  }
+  return rand;
 }
 
-// PKCS#7 Padding for block size of 8 bytes
-const PKCS7Padding = {
-  add(str) {
-    const blockSize = 8;
-    const encoder = new TextEncoder();
-    const bytes = encoder.encode(str);
-    const remainder = bytes.length % blockSize;
-    const padding = remainder === 0 ? blockSize : blockSize - remainder;
-
-    const padded = new Uint8Array(bytes.length + padding);
-    padded.set(bytes);
-    padded.fill(padding, bytes.length);
-    return padded;
-  },
-
-  remove(arr) {
-    const pad = arr[arr.length - 1];
-    return arr.subarray(0, arr.length - pad);
-  },
-};
-
-function random(n) {
-  const trash = new Uint8Array(n);
-  crypto.getRandomValues(trash);
-  return trash;
-}
-
-function knuth(n) {
+function knuthHash(n) {
   const x = n >>> 0;
-  return (Math.imul(x, 0x9e3779b1) >>> 30) & 3;
+  return (Math.imul(x, 0x9e3779b1) >>> 30) & 3; // nur die höchsten 2 Bit als Hash
+}
+
+//**************************************  Converter Functions  **************************************//
+
+function objectTo64BitBlocks(obj) {
+  // 1. Objekt in Bytes umwandeln (JSON + UTF-8)
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(JSON.stringify(obj));
+
+  // 2. Uint8Array in 64-Bit Blöcke aufteilen, padden und in BigInt umwandeln
+  const blockCount = (bytes.length + 7) >> 3; // schnelles aufrunden auf nächstes Vielfaches von 8
+  const blocks = new Array(blockCount);
+  for (let i = 0; i < blockCount; i++) {
+    let block = 0n;
+    // 8 Bytes pro Block
+    for (let j = 0; j < 8; j++) {
+      const byte = bytes[i * 8 + j] ?? 0; // Padding mit 0, falls Block unvollständig
+      block |= BigInt(byte) << BigInt(8 * j); // Bytes in BigInt verschieben
+    }
+    blocks[i] = block;
+  }
+  return blocks;
+}
+
+function blocks64BitToObj(blocks) {
+  const bytes = [];
+
+  // 1. 64-Bit Blöcke zurück in Bytes umwandeln
+  for (const block of blocks) {
+    // 8 Bytes pro Block (Little-Endian)
+    for (let j = 0; j < 8; j++) {
+      const byte = Number((block >> BigInt(8 * j)) & 0xffn);
+      bytes.push(byte);
+    }
+  }
+
+  // 2. Eventuelle Padding-Nullbytes entfernen
+  while (bytes.length && bytes[bytes.length - 1] === 0) {
+    bytes.pop();
+  }
+
+  // 3. Bytes zurück zu String
+  const decoder = new TextDecoder(); // UTF-8
+  return JSON.parse(decoder.decode(new Uint8Array(bytes)));
 }
 
 //**************************************  Core Functions  **************************************//
 
-// Key schedule and update
+const knuthConst = 0x9e3779b97f4a7c15n;
+const sqrt2 = 0x6a09e667f3bcc909n;
+const sqrt3 = 0xbb67ae8584caa73bn;
+const sqrt5 = 0x8b988befb3b3a0a3n;
+const pi = 0x3243f6a8885a308dn;
+const logNat = 0x45f306dc9c883afen;
+const ln2 = 0xb17217f7d1cf79abn;
+
+const mask64 = 0xffffffffffffffffn;
+const mask32 = 0xffffffffn;
+
 const key = {
+  work: 0n,
+  upKey: 0n,
+  downKey: 0n,
   generate(passphrase) {
-    this.value = [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x3f]; //  1/Pi
-    const newkey = encryptString(passphrase);
-    let subkey = newkey.subarray(newkey.length - 8);
-    subkey = feistel(subkey);
-    for (let i = 0; i < 8; i++) this.value[i] = subkey[i];
+    let passblock = objectTo64BitBlocks(passphrase);
+    passblock.push(logNat, ln2);
+    let passblock_ = passblock;
+    this.work = sqrt2;
+    let feedback = pi;
+
+    const crypt = (blocks) => {
+      blocks.forEach((block, i) => {
+        blocks[i] = feistel(block * feedback);
+        feedback = blocks[i];
+      });
+      return blocks;
+    };
+
+    crypt(crypt(passblock));
+    this.work = passblock[passblock.length - 1];
+    feedback = (feedback + sqrt3) & mask64;
+    crypt(crypt(passblock_));
+    this.downKey = passblock_[passblock_.length - 1];
+    this.update();
+    this.upKey = this.work;
   },
   update() {
-    let x = 0n;
-    for (let i = 0; i < 8; i++) x |= BigInt(this.value[i]) << (8n * BigInt(i));
-    x ^= x >> 12n;
-    x ^= (x << 25n) & 0xffffffffffffffffn;
-    x ^= x >> 27n;
-    x = (x * 2685821657736338717n) & 0xffffffffffffffffn;
-    for (let i = 0; i < 8; i++)
-      this.value[i] = Number((x >> (8n * BigInt(i))) & 0xffn);
+    this.work ^= this.work >> 12n;
+    this.work ^= (this.work << 25n) & mask64;
+    this.work ^= this.work >> 27n;
+    this.work = (this.work * knuthConst) & mask64;
   },
 };
 
-// S-Box transformation
-function S_box(box_in) {
-  const uint32 =
-    (box_in[0] | (box_in[1] << 8) | (box_in[2] << 16) | (box_in[3] << 24)) >>>
-    0;
-
-  const shuffle = knuth(uint32);
-  const v0 = sboxes[0 ^ shuffle][box_in[0]] & 0xff;
-  const v1 = sboxes[1 ^ shuffle][box_in[1]] & 0xff;
-  const v2 = sboxes[2 ^ shuffle][box_in[2]] & 0xff;
-  const v3 = sboxes[3 ^ shuffle][box_in[3]] & 0xff;
-
+function S_Box(uint32) {
+  const shuffle = knuthHash(uint32);
+  const bytes = [
+    uint32 & 0xff,
+    (uint32 >>> 8) & 0xff,
+    (uint32 >>> 16) & 0xff,
+    (uint32 >>> 24) & 0xff,
+  ];
+  const [v0, v1, v2, v3] = bytes.map(
+    (byte, i) => sboxes[i ^ shuffle][byte] & 0xff
+  );
   const tmp = (v0 | (v1 << 8) | (v2 << 16) | (v3 << 24)) >>> 0;
-  const merged = (tmp + rol(tmp, 10) + ror(tmp, 11)) >>> 0;
-
-  return new Uint8Array([
-    (merged & 0xff) >>> 0,
-    ((merged >>> 8) & 0xff) >>> 0,
-    ((merged >>> 16) & 0xff) >>> 0,
-    ((merged >>> 24) & 0xff) >>> 0,
-  ]);
+  const merged = (tmp + rol32(tmp, 10) + ror32(tmp, 11)) >>> 0;
+  return merged;
 }
 
-// Feistel network function
-function feistel(block, decrypt = false) {
-  const rounds = 10;
+function feistel(block) {
+  const rounds = 5;
 
   key.update();
-  const data = new Uint8Array(xor(block, key.value));
-  let left = new Uint8Array(data.subarray(0, 4));
-  let right = new Uint8Array(data.subarray(4, 8));
+  let data = block ^ key.work;
+
+  let left = Number(data & mask32) >>> 0;
+  let right = Number((data >> 32n) & mask32) >>> 0;
 
   for (let r = 0; r < rounds; r++) {
-    if (!decrypt) {
-      // Verschlüsselungsreihenfolge (normal)
-      right = xor(right, S_box(left));
-      left = xor(left, S_box(right));
-    } else {
-      // Entschlüsselungsreihenfolge (reverse)
-      left = xor(left, S_box(right));
-      right = xor(right, S_box(left));
-    }
+    const newLeft = right;
+    const newRight = left ^ S_Box(right);
+    left = newLeft;
+    right = newRight;
   }
-  const out = new Uint8Array(8);
-  out.set(left, 0);
-  out.set(right, 4);
-  return xor(out, key.value);
+  let out = BigInt(right) & mask32;
+  out |= (BigInt(left) & mask32) << 32n;
+  return out ^ key.work;
 }
 
 //**************************************  High-Level Functions  **************************************//
 
-// Encrypt and Decrypt functions with CBC mode
-function encryptString(str) {
-  const bytes = PKCS7Padding.add(str);
-  const output = new Uint8Array(bytes.length);
-  const feedback = new Uint8Array(8);
-  const block = new Uint8Array(8);
+function encrypt(data, passphrase) {
+  key.generate(passphrase);
 
-  for (let i = 0; i < bytes.length; i += 8) {
-    const sub = bytes.subarray(i, i + 8);
-    for (let j = 0; j < 8; j++) block[j] = sub[j] ^ feedback[j];
+  const blocks = objectTo64BitBlocks(data);
+  let IV = random64() & mask64;
+  blocks.unshift(IV);
+  IV = random64() & mask64;
+  blocks.push(IV);
 
-    const enc = feistel(block, false);
-    for (let j = 0; j < 8; j++) {
-      feedback[j] = enc[j];
-      output[i + j] = enc[j];
-    }
+  key.work = key.upKey;
+  let feedback = sqrt5;
+  for (let i = 0; i < blocks.length; i++) {
+    blocks[i] ^= feedback;
+    blocks[i] = feistel(blocks[i]);
+    feedback = blocks[i];
   }
-  return output;
+
+  key.work = key.downKey;
+  feedback = sqrt5;
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    blocks[i] ^= feedback;
+    blocks[i] = feistel(blocks[i]);
+    feedback = blocks[i];
+  }
+
+  return blocks;
 }
 
-function decryptToString(encBytes) {
-  const decrypted = new Uint8Array(encBytes.length);
-  const feedback = new Uint8Array(8);
-  const block = new Uint8Array(8);
-  const decoder = new TextDecoder();
+function decrypt(blocks, passphrase) {
+  key.generate(passphrase);
 
-  for (let i = 0; i < encBytes.length; i += 8) {
-    const sub = encBytes.subarray(i, i + 8);
-    for (let j = 0; j < 8; j++) block[j] = sub[j];
-
-    const tmp = feistel(block, true);
-
-    for (let j = 0; j < 8; j++) {
-      const val = tmp[j] ^ feedback[j];
-      decrypted[i + j] = val;
-      feedback[j] = block[j];
-    }
+  let delayed = 0n;
+  key.work = key.downKey;
+  let feedback = sqrt5;
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    delayed = blocks[i];
+    blocks[i] = feistel(blocks[i]);
+    blocks[i] ^= feedback;
+    feedback = delayed;
   }
-  const unpadded = PKCS7Padding.remove(decrypted);
-  return decoder.decode(unpadded);
-}
 
-// Data structure to hold plaintext, ciphertext and state
-const dataString = {
-  plaintext: "",
-  chiffre: [],
-  iscrypted: false,
-  crypt() {
-    this.chiffre = encryptString(this.plaintext);
-    this.iscrypted = true;
-  },
-  decrypt() {
-    this.plaintext = decryptToString(this.chiffre);
-    this.iscrypted = false;
-  },
-  salt() {
-    this.plaintext = String.fromCharCode(...random(8)) + this.plaintext;
-  },
-  unsalt() {
-    this.plaintext = this.plaintext.subarray
-      ? this.plaintext.subarray(8)
-      : this.plaintext.slice(8);
-  },
-};
+  key.work = key.upKey;
+  feedback = sqrt5;
+  for (let i = 0; i < blocks.length; i++) {
+    delayed = blocks[i];
+    blocks[i] = feistel(blocks[i]);
+    blocks[i] ^= feedback;
+    feedback = delayed;
+  }
+
+  blocks.shift();
+  blocks.pop();
+  return blocks64BitToObj(blocks);
+}
 
 //**************************************  UI and Interaction  **************************************//
 
@@ -389,36 +412,32 @@ function log(...args) {
   outputEl.textContent += args.join(" ") + "\n";
 }
 
+userInput = {};
+
 // Event listener for the "Run" button
 document.getElementById("runBtn").addEventListener("click", () => {
   outputEl.textContent = ""; // Vor jedem Lauf resetten
 
   // --- Eingaben einlesen ---
-  dataString.plaintext = document.getElementById("plaintext").value;
+  userInput.value = document.getElementById("plaintext").value;
+  log("Original:", userInput.value);
   const plainkey = document.getElementById("plainkey").value;
+  log("Passwort:", plainkey);
 
   // --- Hauptprogramm ---
-  log("Original:", dataString.plaintext);
-  dataString.salt();
-  log("Salted:", dataString.plaintext);
-  key.generate(plainkey);
-  log("Key ->: ", key.value);
-  dataString.crypt();
-  log("Encrypted bytes:", dataString.chiffre);
-  key.generate(plainkey);
-  log("Key <-: ", key.value);
-  dataString.decrypt();
-  log("Decrypted (with salt):", dataString.plaintext);
-  dataString.unsalt();
-  log("Decrypted and unsalted:", dataString.plaintext);
+  const chiffrat = encrypt(userInput, plainkey);
+  log("Encrypted Blocks:", chiffrat);
+
+  const result = decrypt(chiffrat, plainkey);
+  log("Decrypted:", result.value);
 });
 
 //**************************************  To Do List  **************************************//
 
 /* 
-  Fehlt noch:
-  - Code aufräumen und verschönern
-  - neu durchkommentieren (lassen?)
-  - irgendwas geiles
+128-Bit key implementiert und alle Blöcke miteinander verheiratet.
+Algorithmus komplett! + Doppelt gesalzen.
   
+Fehlt noch:
+- neu durchkommentieren
 */
