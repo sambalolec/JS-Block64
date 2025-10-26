@@ -271,29 +271,41 @@ const pi = 0x3243f6a8885a308dn;
 const logNat = 0x45f306dc9c883afen;
 const ln2 = 0xb17217f7d1cf79abn;
 
+const mask64 = 0xffffffffffffffffn;
+const mask32 = 0xffffffffn;
+
 const key = {
-  value: 0n,
+  work: 0n,
+  upKey: 0n,
+  downKey: 0n,
   generate(passphrase) {
-    passphrase += "0x45f306dc9c883afe"; // Wert ohne Bedeutung, nur zum Verlängern.
     let passblock = objectTo64BitBlocks(passphrase);
-    this.value = sqrt2;
+    passblock.push(logNat, ln2);
+    let passblock_ = passblock;
+    this.work = sqrt2;
     let feedback = pi;
 
-    const crypt = (block) => {
-      block.forEach((b, i) => {
-        block[i] = feistel(b * feedback);
-        feedback = block[i];
+    const crypt = (blocks) => {
+      blocks.forEach((block, i) => {
+        blocks[i] = feistel(block * feedback);
+        feedback = blocks[i];
       });
-      return block;
+      return blocks;
     };
+
     crypt(crypt(passblock));
-    this.value = passblock[passblock.length - 1];
+    this.work = passblock[passblock.length - 1];
+    feedback = (feedback + sqrt3) & mask64;
+    crypt(crypt(passblock_));
+    this.downKey = passblock_[passblock_.length - 1];
+    this.update();
+    this.upKey = this.work;
   },
   update() {
-    this.value ^= this.value >> 12n;
-    this.value ^= (this.value << 25n) & 0xffffffffffffffffn;
-    this.value ^= this.value >> 27n;
-    this.value = (this.value * knuthConst) & 0xffffffffffffffffn;
+    this.work ^= this.work >> 12n;
+    this.work ^= (this.work << 25n) & mask64;
+    this.work ^= this.work >> 27n;
+    this.work = (this.work * knuthConst) & mask64;
   },
 };
 
@@ -314,13 +326,13 @@ function S_Box(uint32) {
 }
 
 function feistel(block) {
-  const rounds = 10;
+  const rounds = 5;
 
   key.update();
-  let data = block ^ key.value;
+  let data = block ^ key.work;
 
-  let left = Number(data & 0xffffffffn) >>> 0;
-  let right = Number((data >> 32n) & 0xffffffffn) >>> 0;
+  let left = Number(data & mask32) >>> 0;
+  let right = Number((data >> 32n) & mask32) >>> 0;
 
   for (let r = 0; r < rounds; r++) {
     const newLeft = right;
@@ -328,42 +340,63 @@ function feistel(block) {
     left = newLeft;
     right = newRight;
   }
-  let out = BigInt(right) & 0xffffffffn;
-  out |= (BigInt(left) & 0xffffffffn) << 32n;
-  return out ^ key.value;
+  let out = BigInt(right) & mask32;
+  out |= (BigInt(left) & mask32) << 32n;
+  return out ^ key.work;
 }
 
 //**************************************  High-Level Functions  **************************************//
 
 function encrypt(data, passphrase) {
-  const blocks = objectTo64BitBlocks(data);
-  const IV = random64() & 0xffffffffffffffffn;
-  blocks.unshift(IV);
   key.generate(passphrase);
-  let feedback = sqrt5;
 
+  const blocks = objectTo64BitBlocks(data);
+  const IV = random64() & mask64;
+  blocks.unshift(IV);
+
+  key.work = key.upKey;
+  let feedback = sqrt5;
   for (let i = 0; i < blocks.length; i++) {
     blocks[i] ^= feedback;
     blocks[i] = feistel(blocks[i]);
     feedback = blocks[i];
   }
+
+  key.work = key.downKey;
+  feedback = sqrt5;
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    blocks[i] ^= feedback;
+    blocks[i] = feistel(blocks[i]);
+    feedback = blocks[i];
+  }
+
   return blocks;
 }
 
 function decrypt(blocks, passphrase) {
   key.generate(passphrase);
-  let feedback = 0n;
-  let delayed = sqrt5;
 
+  let delayed = 0n;
+  key.work = key.downKey;
+  let feedback = sqrt5;
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    delayed = blocks[i];
+    blocks[i] = feistel(blocks[i]);
+    blocks[i] ^= feedback;
+    feedback = delayed;
+  }
+
+  key.work = key.upKey;
+  feedback = sqrt5;
   for (let i = 0; i < blocks.length; i++) {
     delayed = blocks[i];
     blocks[i] = feistel(blocks[i]);
     blocks[i] ^= feedback;
     feedback = delayed;
   }
+
   blocks.shift();
-  let data = blocks64BitToObj(blocks);
-  return data;
+  return blocks64BitToObj(blocks);
 }
 
 //**************************************  UI and Interaction  **************************************//
@@ -399,12 +432,9 @@ document.getElementById("runBtn").addEventListener("click", () => {
 //**************************************  To Do List  **************************************//
 
 /* 
-  Function "feistel" jetzt kein boolean mehr nötig.
-  Function "S_Box" jetzt besser zu lesen.
-  Funktion "random64" jetzt einen Tick flotter.
-  Div kleine Änderungen wg. Lesbarkeit
-  Fehlt noch:
-  - 128-Bit Key
-  - Blockmerge
-  - neu durchkommentieren (lassen?)
+128-Bit key implementiert und alle Blöcke miteinander verheiratet.
+Algorithmus komplett!
+  
+Fehlt noch:
+- neu durchkommentieren
 */
