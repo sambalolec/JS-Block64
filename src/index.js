@@ -186,25 +186,26 @@ const key = {
   work: 0n,
   upKey: 0n,
   downKey: 0n,
-  generate(passphrase) {
+  init(passphrase) {
     let passblock = objectTo64BitBlocks(passphrase);
-    passblock.push(logNat, ln2);
     let passblock_ = passblock;
-    this.work = sqrt2;
     let feedback = pi;
 
-    const crypt = (blocks) => {
+    const createKey = (blocks) => {
       blocks.forEach((block, i) => {
         blocks[i] = feistel(block * feedback);
         feedback = blocks[i];
       });
       return blocks;
     };
+    passblock.push(logNat, ln2);
+    this.work = sqrt2;
+    createKey(createKey(passblock));
 
-    crypt(crypt(passblock));
-    this.work = passblock[passblock.length - 1];
     feedback = (feedback + sqrt3) & mask64;
-    crypt(crypt(passblock_));
+    passblock_.push(ln2, logNat);
+    this.work = passblock[passblock.length - 1];
+    createKey(createKey(passblock_));
     this.downKey = passblock_[passblock_.length - 1];
     this.update();
     this.upKey = this.work;
@@ -238,7 +239,6 @@ function feistel(block) {
 
   key.update();
   let data = block ^ key.work;
-
   let left = Number(data & mask32) >>> 0;
   let right = Number((data >> 32n) & mask32) >>> 0;
 
@@ -256,7 +256,7 @@ function feistel(block) {
 //**************************************  High-Level Functions  **************************************//
 
 function encrypt(data, passphrase) {
-  key.generate(passphrase);
+  key.init(passphrase);
 
   const blocks = objectTo64BitBlocks(data);
   let IV = random64() & mask64;
@@ -284,7 +284,7 @@ function encrypt(data, passphrase) {
 }
 
 function decrypt(blocks, passphrase) {
-  key.generate(passphrase);
+  key.init(passphrase);
 
   let delayed = 0n;
   key.work = key.downKey;
@@ -347,5 +347,6 @@ document.getElementById("runBtn").addEventListener("click", () => {
 Algorithmus komplett! + Doppelt gesalzen.
   
 Fehlt noch:
+- Datenkompression
 - neu durchkommentieren
 */
