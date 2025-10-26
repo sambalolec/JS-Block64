@@ -351,8 +351,10 @@ function encrypt(data, passphrase) {
   key.generate(passphrase);
 
   const blocks = objectTo64BitBlocks(data);
-  const IV = random64() & mask64;
+  let IV = random64() & mask64;
   blocks.unshift(IV);
+  IV = random64() & mask64;
+  blocks.push(IV);
 
   key.work = key.upKey;
   let feedback = sqrt5;
@@ -396,6 +398,7 @@ function decrypt(blocks, passphrase) {
   }
 
   blocks.shift();
+  blocks.pop();
   return blocks64BitToObj(blocks);
 }
 
@@ -433,7 +436,7 @@ document.getElementById("runBtn").addEventListener("click", () => {
 
 /* 
 128-Bit key implementiert und alle Blöcke miteinander verheiratet.
-Algorithmus komplett!
+Algorithmus komplett! + Doppelt gesalzen.
   
 Fehlt noch:
 - neu durchkommentieren
