@@ -98,8 +98,49 @@ const sbox4 = [
 ];
 Object.freeze(sbox4);
 
-const sboxes = [sbox1, sbox2, sbox3, sbox4];
-Object.freeze(sboxes);
+const alphabets = [
+  [sbox1, sbox2, sbox3, sbox4],
+  [sbox1, sbox2, sbox4, sbox3],
+  [sbox1, sbox3, sbox2, sbox4],
+  [sbox1, sbox3, sbox4, sbox2],
+  [sbox1, sbox4, sbox2, sbox3],
+  [sbox1, sbox4, sbox3, sbox2],
+
+  [sbox2, sbox1, sbox3, sbox4],
+  [sbox2, sbox1, sbox4, sbox3],
+  [sbox2, sbox3, sbox1, sbox4],
+  [sbox2, sbox3, sbox4, sbox1],
+  [sbox2, sbox4, sbox1, sbox3],
+  [sbox2, sbox4, sbox3, sbox1],
+
+  [sbox3, sbox1, sbox2, sbox4],
+  [sbox3, sbox1, sbox4, sbox2],
+  [sbox3, sbox2, sbox1, sbox4],
+  [sbox3, sbox2, sbox4, sbox1],
+  [sbox3, sbox4, sbox1, sbox2],
+  [sbox3, sbox4, sbox2, sbox1],
+
+  [sbox4, sbox1, sbox2, sbox3],
+  [sbox4, sbox1, sbox3, sbox2],
+  [sbox4, sbox2, sbox1, sbox3],
+  [sbox4, sbox2, sbox3, sbox1],
+  [sbox4, sbox3, sbox1, sbox2],
+  [sbox4, sbox3, sbox2, sbox1],
+];
+Object.freeze(alphabets);
+
+// Irrationale Zahlen *2^64 für die bunte Mischung
+const knuthConst = 0x9e3779b97f4a7c15n;
+const sqrt2 = 0x6a09e667f3bcc909n;
+const sqrt3 = 0xbb67ae8584caa73bn;
+const sqrt5 = 0x8b988befb3b3a0a3n;
+const pi = 0x3243f6a8885a308dn;
+const logNat = 0x45f306dc9c883afdn;
+const ln2 = 0xb17217f7d1cf79abn;
+
+// Konstanten um weniger zu tippen und um Fehler zu vermeiden
+const mask64 = 0xffffffffffffffffn;
+const mask32 = 0xffffffffn;
 
 //**************************************  Utility Functions  **************************************//
 
@@ -122,10 +163,10 @@ function random64() {
   return rand;
 }
 
-// Berechnet eine 2-Bit Prüfsumme; Für Kryptonalyse 0 zurück geben! Sonst Ergebnis nicht korrekt.
+// Berechnet eine Prüfsumme; Für Kryptonalyse 0 zurück geben! Sonst Ergebnis nicht korrekt.
 function knuthHash(n) {
   const x = n >>> 0;
-  return (Math.imul(x, 0x9e3779b1) >>> 30) & 3; // nur die höchsten 2 Bit als Hash
+  return (Math.imul(x, 0x9e3779b1) >>> 30) % 24;
 }
 
 //**************************************  Converter Functions  **************************************//
@@ -173,19 +214,6 @@ function blocks64BitToObj(blocks) {
 }
 
 //**************************************  Core Functions  **************************************//
-
-// Irrationale Zahlen *2^64 für bunte Mischung
-const knuthConst = 0x9e3779b97f4a7c15n;
-const sqrt2 = 0x6a09e667f3bcc909n;
-const sqrt3 = 0xbb67ae8584caa73bn;
-const sqrt5 = 0x8b988befb3b3a0a3n;
-const pi = 0x3243f6a8885a308dn;
-const logNat = 0x45f306dc9c883afdn;
-const ln2 = 0xb17217f7d1cf79abn;
-
-// Konstanten um weniger zu tippen und um Fehler zu vermeiden
-const mask64 = 0xffffffffffffffffn;
-const mask32 = 0xffffffffn;
 
 // Das Key-Objekt
 const key = {
@@ -248,9 +276,9 @@ function S_Box(uint32) {
 
   // Nichtlineare Substitution: Mit dem Hash das Alphabet festlegen und anwenden
   const shuffle = knuthHash(uint32);
-  const [v0, v1, v2, v3] = bytes.map(
-    (byte, i) => sboxes[i ^ shuffle][byte] & 0xff
-  );
+  let sboxes = alphabets[shuffle];
+
+  const [v0, v1, v2, v3] = bytes.map((byte, i) => sboxes[i][byte] & 0xff);
 
   // Die 8-Bit Blöcke wieder zu einer 32-Bit Zahl kombinieren und mixen
   const tmp = (v0 | (v1 << 8) | (v2 << 16) | (v3 << 24)) >>> 0;
@@ -385,9 +413,7 @@ document.getElementById("runBtn").addEventListener("click", () => {
 //**************************************  To Do List  **************************************//
 
 /* 
-key-Objekt neu gestrickt. Multiplikationen auf eine reduziert, 
-key.update verbessert so wie das Schlüsselhandling generell.
-  
+Mehr Leben in die S_box gebracht.
 Fehlt noch:
 - Datenkompression; JSON.stringify bläst die Datenstruktur ungemein auf
 */
