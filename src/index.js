@@ -103,6 +103,7 @@ Object.freeze(sboxes);
 
 //**************************************  Utility Functions  **************************************//
 
+// ROL und ROR, in JS schmerzlich vermisst
 function rol32(value, shift) {
   return ((value << shift) | (value >>> (32 - shift))) >>> 0;
 }
@@ -110,6 +111,7 @@ function ror32(value, shift) {
   return ((value >>> shift) | (value << (32 - shift))) >>> 0;
 }
 
+// Generiert 64-Bit Zufallszahlen; Für Kryptoanalyse 0n zurück geben! Sonst Ergebnis totaler Blödsinn.
 function random64() {
   const arr = new Uint32Array(2);
   crypto.getRandomValues(arr);
@@ -120,6 +122,7 @@ function random64() {
   return rand;
 }
 
+// Berechnet eine 2-Bit Prüfsumme; Für Kryptonalyse 0 zurück geben! Sonst Ergebnis nicht korrekt.
 function knuthHash(n) {
   const x = n >>> 0;
   return (Math.imul(x, 0x9e3779b1) >>> 30) & 3; // nur die höchsten 2 Bit als Hash
@@ -128,12 +131,12 @@ function knuthHash(n) {
 //**************************************  Converter Functions  **************************************//
 
 function objectTo64BitBlocks(obj) {
-  // 1. Objekt in Bytes umwandeln (JSON + UTF-8)
+  // Objekt in Bytes umwandeln (JSON + UTF-8)
   const encoder = new TextEncoder();
   const bytes = encoder.encode(JSON.stringify(obj));
 
-  // 2. Uint8Array in 64-Bit Blöcke aufteilen, padden und in BigInt umwandeln
-  const blockCount = (bytes.length + 7) >> 3; // schnelles aufrunden auf nächstes Vielfaches von 8
+  // Uint8Array in 64-Bit Blöcke aufteilen, padden und in BigInt umwandeln
+  const blockCount = (bytes.length + 7) >> 3; // schnelles aufrunden auf nächstes Vielfaches von 8 (Assemblertrick)
   const blocks = new Array(blockCount);
   for (let i = 0; i < blockCount; i++) {
     let block = 0n;
@@ -150,7 +153,7 @@ function objectTo64BitBlocks(obj) {
 function blocks64BitToObj(blocks) {
   const bytes = [];
 
-  // 1. 64-Bit Blöcke zurück in Bytes umwandeln
+  // 64-Bit Blöcke zurück in Bytes umwandeln
   for (const block of blocks) {
     // 8 Bytes pro Block (Little-Endian)
     for (let j = 0; j < 8; j++) {
@@ -159,12 +162,12 @@ function blocks64BitToObj(blocks) {
     }
   }
 
-  // 2. Eventuelle Padding-Nullbytes entfernen
+  // Eventuelle Padding-Nullbytes entfernen
   while (bytes.length && bytes[bytes.length - 1] === 0) {
     bytes.pop();
   }
 
-  // 3. Bytes zurück zu String
+  // Bytes zurück zu String
   const decoder = new TextDecoder(); // UTF-8
   return JSON.parse(decoder.decode(new Uint8Array(bytes)));
 }
@@ -180,38 +183,45 @@ const pi = 0x3243f6a8885a308dn;
 const logNat = 0x45f306dc9c883afen;
 const ln2 = 0xb17217f7d1cf79abn;
 
-// Konstanten umweniger zu tippen und um Fehler zu vermeiden
+// Konstanten um weniger zu tippen und um Fehler zu vermeiden
 const mask64 = 0xffffffffffffffffn;
 const mask32 = 0xffffffffn;
 
+// Das Key-Objekt
 const key = {
-  work: 0n,
-  upKey: 0n,
-  downKey: 0n,
-  init(passphrase) {
-    let passblock = objectTo64BitBlocks(passphrase);
-    let passblock_ = passblock;
-    let feedback = pi;
+  work: 0n, // Arbeitsschlüssel, wird für jeden einzelnen Block upgedatet
+  upKey: 0n, // Schlüssel für Aufwärtsverschlüsselung
+  downKey: 0n, // Schlüssel für Abwärtsverschlüsselung
 
+  // aus dem Passwort zwei 64 Bit Schlüssel erzeugen,
+  // ... die mathematisch praktisch nix miteinander zu tun haben
+  init(passphrase) {
+    let passUp = objectTo64BitBlocks(passphrase);
+    let passDown = passUp;
+    let feedback = pi;
+    // Schlüssel verschlüsseln
     const createKey = (blocks) => {
       blocks.forEach((block, i) => {
-        blocks[i] = feistel(block * feedback);
+        blocks[i] = feistel(block * feedback) & mask64;
         feedback = blocks[i];
       });
       return blocks;
     };
-    passblock.push(logNat, ln2);
+    // Up- und Downkey möglichst schrullig berechnen
+    passUp.push(logNat, ln2);
     this.work = sqrt2;
-    createKey(createKey(passblock));
+    createKey(createKey(passUp));
 
     feedback = (feedback + sqrt3) & mask64;
-    passblock_.push(ln2, logNat);
-    this.work = passblock[passblock.length - 1];
-    createKey(createKey(passblock_));
-    this.downKey = passblock_[passblock_.length - 1];
+    passDown.push(ln2, logNat);
+    this.work = passUp[passUp.length - 1];
+    createKey(createKey(passDown));
+    this.downKey = passDown[passDown.length - 1];
     this.update();
     this.upKey = this.work;
   },
+  // Für jeden neuen Block frischen Key aus altem generieren mit XorShift64*
+  // Bessere Performance mit "+" statt "*", aber mathematisch weniger komplex
   update() {
     this.work ^= this.work >> 12n;
     this.work ^= (this.work << 25n) & mask64;
@@ -244,7 +254,7 @@ function S_Box(uint32) {
 function feistel(block) {
   const rounds = 5;
 
-  // Frischen Blockkey erstellen und auf Input anwenden
+  // Frischen Blockkey erstellen und Input damit verXodern
   key.update();
   let data = block ^ key.work;
   // 64-Bit BigInt in linke und rechte Hälfte zerlegen
@@ -357,7 +367,11 @@ document.getElementById("runBtn").addEventListener("click", () => {
 
   // --- Hauptprogramm ---
   const chiffrat = encrypt(userInput, plainkey);
-  log("Encrypted Blocks:", chiffrat);
+  log(
+    "Encrypted Blocks:",
+    // chiffrat.map((x) => "0x" + x.toString(16)) // Format: Ausgabe in Hex
+    chiffrat.map((x) => "0x" + x.toString(16).padStart(16, "0")) // Ausgabe in Hex inklusive führender Nullen (holy shit)
+  );
 
   const result = decrypt(chiffrat, plainkey);
   log("Decrypted:", result.value);
@@ -366,10 +380,8 @@ document.getElementById("runBtn").addEventListener("click", () => {
 //**************************************  To Do List  **************************************//
 
 /* 
-128-Bit key implementiert und alle Blöcke miteinander verheiratet.
-Algorithmus komplett! + Doppelt gesalzen.
+Ausgabe in Hex, mehr kommentiert, kleiner Bug gefixt 
   
 Fehlt noch:
-- Datenkompression
-- ein paar zusätzliche Kommentare
+- Datenkompression; JSON.stringify bläst die Datenstruktur ungemein auf
 */
