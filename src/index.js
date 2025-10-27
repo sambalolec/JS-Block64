@@ -289,13 +289,13 @@ function feistel(block) {
 function encrypt(data, passphrase) {
   // Input in Binary umwandeln und in Random-Blocks kapseln
   const blocks = objectTo64BitBlocks(data);
-  let IV = random64() & mask64;
+  let IV = random64();
   blocks.unshift(IV);
-  IV = random64() & mask64;
+  IV = random64();
   blocks.push(IV);
 
   // Aufwärts verschlüsseln mit CBC
-  key.init(passphrase);
+  key.init(passphrase + "up");
   let feedback = sqrt5;
   for (let i = 0; i < blocks.length; i++) {
     blocks[i] ^= feedback;
@@ -304,7 +304,7 @@ function encrypt(data, passphrase) {
   }
 
   // Rückwärts verschlüsseln mit CBC
-  key.init(passphrase);
+  key.init(passphrase + "down");
   feedback = sqrt5;
   for (let i = blocks.length - 1; i >= 0; i--) {
     blocks[i] ^= feedback;
@@ -317,7 +317,7 @@ function encrypt(data, passphrase) {
 
 function decrypt(blocks, passphrase) {
   // Rückwärts entschlüsseln mit CBC
-  key.init(passphrase);
+  key.init(passphrase + "down");
   let delayed = 0n;
   let feedback = sqrt5;
   for (let i = blocks.length - 1; i >= 0; i--) {
@@ -328,7 +328,7 @@ function decrypt(blocks, passphrase) {
   }
 
   // Vorwärts entschlüsseln mit CBC
-  key.init(passphrase);
+  key.init(passphrase + "up");
   feedback = sqrt5;
   for (let i = 0; i < blocks.length; i++) {
     delayed = blocks[i];
