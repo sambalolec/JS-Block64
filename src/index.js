@@ -384,7 +384,7 @@ document.getElementById("runBtn").addEventListener("click", () => {
 //**************************************  To Do List  **************************************//
 
 /* 
-Ausgabe in Hex, mehr kommentiert, kleiner Bug gefixt 
+Ausgabe jetzt in Hex, mehr kommentiert, kleiner Bug gefixt 
   
 Fehlt noch:
 - Datenkompression; JSON.stringify bläst die Datenstruktur ungemein auf
