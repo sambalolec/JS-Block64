@@ -180,7 +180,7 @@ const sqrt2 = 0x6a09e667f3bcc909n;
 const sqrt3 = 0xbb67ae8584caa73bn;
 const sqrt5 = 0x8b988befb3b3a0a3n;
 const pi = 0x3243f6a8885a308dn;
-const logNat = 0x45f306dc9c883afen;
+const logNat = 0x45f306dc9c883afdn;
 const ln2 = 0xb17217f7d1cf79abn;
 
 // Konstanten um weniger zu tippen und um Fehler zu vermeiden
@@ -190,43 +190,50 @@ const mask32 = 0xffffffffn;
 // Das Key-Objekt
 const key = {
   work: 0n, // Arbeitsschlüssel, wird für jeden einzelnen Block upgedatet
-  upKey: 0n, // Schlüssel für Aufwärtsverschlüsselung
-  downKey: 0n, // Schlüssel für Abwärtsverschlüsselung
+  seed0: 0n, // Seeds dito
+  seed1: 0n, // Alles dreht sich, alles bewegt sich
 
-  // aus dem Passwort zwei 64 Bit Schlüssel erzeugen,
-  // ... die mathematisch praktisch nix miteinander zu tun haben
+  // aus dem Passwort zwei 64 Bit Seeds erzeugen,
+  // ... die mathematisch praktisch nix miteinander zu tun haben sollten
   init(passphrase) {
-    let passUp = objectTo64BitBlocks(passphrase);
-    let passDown = passUp;
+    // Mit krummen Werten Initialisieren
+    this.seed0 = sqrt2;
+    this.seed1 = sqrt3;
+    // Passwort in Bytes konvertieren, auf mindestens 3 Blöcke (192 Bit) verlängern
+    // ... und den ersten Block aufregender gestalten
+    let passBlocks = objectTo64BitBlocks(passphrase);
+    passBlocks.push(logNat, ln2);
+    passBlocks[0] = (passBlocks[0] * knuthConst) & mask64;
+
+    // Passwortblöcke miteinander verwursteln
     let feedback = pi;
-    // Schlüssel verschlüsseln
     const createKey = (blocks) => {
       blocks.forEach((block, i) => {
-        blocks[i] = feistel(block * feedback) & mask64;
+        blocks[i] = feistel((block + feedback) & mask64);
         feedback = blocks[i];
       });
       return blocks;
     };
-    // Up- und Downkey möglichst schrullig berechnen
-    passUp.push(logNat, ln2);
-    this.work = sqrt2;
-    createKey(createKey(passUp));
-
-    feedback = (feedback + sqrt3) & mask64;
-    passDown.push(ln2, logNat);
-    this.work = passUp[passUp.length - 1];
-    createKey(createKey(passDown));
-    this.downKey = passDown[passDown.length - 1];
+    // Neue Seeds aus Passwortblöcken möglichst schrullig berechnen
+    for (let i = 0; i < 3; i++) {
+      createKey(passBlocks);
+      this.seed0 ^= passBlocks[passBlocks.length - 1];
+      createKey(passBlocks);
+      this.seed1 ^= passBlocks[passBlocks.length - 1];
+    }
     this.update();
-    this.upKey = this.work;
   },
-  // Für jeden neuen Block frischen Key aus altem generieren mit XorShift64*
-  // Bessere Performance mit "+" statt "*", aber mathematisch weniger komplex
+  // Für jeden neuen Block frischen Key generieren mit XorShift128+
   update() {
-    this.work ^= this.work >> 12n;
-    this.work ^= (this.work << 25n) & mask64;
-    this.work ^= this.work >> 27n;
-    this.work = (this.work * knuthConst) & mask64;
+    let s0 = this.seed0;
+    const s1 = this.seed1;
+    this.seed0 = s1;
+    s0 ^= s0 << 23n;
+    s0 ^= s0 >> 17n;
+    s0 ^= s1;
+    s0 ^= s1 >> 26n;
+    this.seed1 = s0;
+    this.work = (this.seed1 + this.seed0) & mask64;
   },
 };
 
@@ -239,7 +246,7 @@ function S_Box(uint32) {
     (uint32 >>> 24) & 0xff,
   ];
 
-  // Substitution: Mit dem Hash das Alphabet festlegen und anwenden
+  // Nichtlineare Substitution: Mit dem Hash das Alphabet festlegen und anwenden
   const shuffle = knuthHash(uint32);
   const [v0, v1, v2, v3] = bytes.map(
     (byte, i) => sboxes[i ^ shuffle][byte] & 0xff
@@ -280,9 +287,6 @@ function feistel(block) {
 //**************************************  High-Level Functions  **************************************//
 
 function encrypt(data, passphrase) {
-  // Keys aus Passwort erzeugen
-  key.init(passphrase);
-
   // Input in Binary umwandeln und in Random-Blocks kapseln
   const blocks = objectTo64BitBlocks(data);
   let IV = random64() & mask64;
@@ -291,7 +295,7 @@ function encrypt(data, passphrase) {
   blocks.push(IV);
 
   // Aufwärts verschlüsseln mit CBC
-  key.work = key.upKey;
+  key.init(passphrase);
   let feedback = sqrt5;
   for (let i = 0; i < blocks.length; i++) {
     blocks[i] ^= feedback;
@@ -300,7 +304,7 @@ function encrypt(data, passphrase) {
   }
 
   // Rückwärts verschlüsseln mit CBC
-  key.work = key.downKey;
+  key.init(passphrase);
   feedback = sqrt5;
   for (let i = blocks.length - 1; i >= 0; i--) {
     blocks[i] ^= feedback;
@@ -312,12 +316,9 @@ function encrypt(data, passphrase) {
 }
 
 function decrypt(blocks, passphrase) {
-  // Keys aus Passwort erzeugen
-  key.init(passphrase);
-
   // Rückwärts entschlüsseln mit CBC
+  key.init(passphrase);
   let delayed = 0n;
-  key.work = key.downKey;
   let feedback = sqrt5;
   for (let i = blocks.length - 1; i >= 0; i--) {
     delayed = blocks[i];
@@ -327,7 +328,7 @@ function decrypt(blocks, passphrase) {
   }
 
   // Vorwärts entschlüsseln mit CBC
-  key.work = key.upKey;
+  key.init(passphrase);
   feedback = sqrt5;
   for (let i = 0; i < blocks.length; i++) {
     delayed = blocks[i];
@@ -384,7 +385,8 @@ document.getElementById("runBtn").addEventListener("click", () => {
 //**************************************  To Do List  **************************************//
 
 /* 
-Ausgabe jetzt in Hex, mehr kommentiert, kleiner Bug gefixt 
+key-Objekt neu gestrickt. Multiplikationen auf eine reduziert, 
+key.update verbessert so wie das Schlüsselhandling generell.
   
 Fehlt noch:
 - Datenkompression; JSON.stringify bläst die Datenstruktur ungemein auf
