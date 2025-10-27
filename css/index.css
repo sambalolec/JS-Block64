@@ -7,8 +7,45 @@ body {
   justify-content: flex-start;
   min-height: 100vh;
   margin: 2rem;
-  background: #362a2a;
+  background: linear-gradient(160deg, #473939 0%, #251e1e 100%);
   color: #222;
+}
+
+/* Überschriften */
+h1,
+h2,
+h3 {
+  color: #eee;
+  text-align: center;
+  font-weight: 500;
+  margin: 0.5rem 0;
+}
+
+/* Hauptüberschrift */
+h1 {
+  font-size: 1.8rem;
+  letter-spacing: 1px;
+  border-bottom: 1px solid #555;
+  padding-bottom: 0.4rem;
+}
+
+/* Unterüberschrift */
+h2 {
+  font-size: 1.2rem;
+  font-weight: 400;
+  color: #ccc;
+  margin-top: 0.3rem;
+  margin-bottom: 1.5rem;
+  font-style: italic;
+}
+
+/* Unterunterüberschrift */
+h3 {
+  color: #ddd;
+  font-size: 1rem;
+  font-weight: 300;
+  border: none;
+  padding: 0;
 }
 
 /* Eingabefelder */
