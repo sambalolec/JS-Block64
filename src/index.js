@@ -171,6 +171,7 @@ function blocks64BitToObj(blocks) {
 
 //**************************************  Core Functions  **************************************//
 
+// Irrationale Zahlen *2^64 für bunte Mischung
 const knuthConst = 0x9e3779b97f4a7c15n;
 const sqrt2 = 0x6a09e667f3bcc909n;
 const sqrt3 = 0xbb67ae8584caa73bn;
@@ -179,6 +180,7 @@ const pi = 0x3243f6a8885a308dn;
 const logNat = 0x45f306dc9c883afen;
 const ln2 = 0xb17217f7d1cf79abn;
 
+// Konstanten umweniger zu tippen und um Fehler zu vermeiden
 const mask64 = 0xffffffffffffffffn;
 const mask32 = 0xffffffffn;
 
@@ -219,16 +221,21 @@ const key = {
 };
 
 function S_Box(uint32) {
-  const shuffle = knuthHash(uint32);
+  // 32 Bit Input in 4 Blöcke zu je 8 Bit zerlegen
   const bytes = [
     uint32 & 0xff,
     (uint32 >>> 8) & 0xff,
     (uint32 >>> 16) & 0xff,
     (uint32 >>> 24) & 0xff,
   ];
+
+  // Substitution: Mit dem Hash das Alphabet festlegen und anwenden
+  const shuffle = knuthHash(uint32);
   const [v0, v1, v2, v3] = bytes.map(
     (byte, i) => sboxes[i ^ shuffle][byte] & 0xff
   );
+
+  // Die 8-Bit Blöcke wieder zu einer 32-Bit Zahl kombinieren und mixen
   const tmp = (v0 | (v1 << 8) | (v2 << 16) | (v3 << 24)) >>> 0;
   const merged = (tmp + rol32(tmp, 10) + ror32(tmp, 11)) >>> 0;
   return merged;
@@ -237,33 +244,43 @@ function S_Box(uint32) {
 function feistel(block) {
   const rounds = 5;
 
+  // Frischen Blockkey erstellen und auf Input anwenden
   key.update();
   let data = block ^ key.work;
+  // 64-Bit BigInt in linke und rechte Hälfte zerlegen
   let left = Number(data & mask32) >>> 0;
   let right = Number((data >> 32n) & mask32) >>> 0;
 
+  // Durchnudeln
   for (let r = 0; r < rounds; r++) {
     const newLeft = right;
     const newRight = left ^ S_Box(right);
     left = newLeft;
     right = newRight;
   }
+
+  // Die beiden Hälften rekombinieren
   let out = BigInt(right) & mask32;
   out |= (BigInt(left) & mask32) << 32n;
+
+  // Erneut mit Blockkey verXodern und zurück geben
   return out ^ key.work;
 }
 
 //**************************************  High-Level Functions  **************************************//
 
 function encrypt(data, passphrase) {
+  // Keys aus Passwort erzeugen
   key.init(passphrase);
 
+  // Input in Binary umwandeln und in Random-Blocks kapseln
   const blocks = objectTo64BitBlocks(data);
   let IV = random64() & mask64;
   blocks.unshift(IV);
   IV = random64() & mask64;
   blocks.push(IV);
 
+  // Aufwärts verschlüsseln mit CBC
   key.work = key.upKey;
   let feedback = sqrt5;
   for (let i = 0; i < blocks.length; i++) {
@@ -272,6 +289,7 @@ function encrypt(data, passphrase) {
     feedback = blocks[i];
   }
 
+  // Rückwärts verschlüsseln mit CBC
   key.work = key.downKey;
   feedback = sqrt5;
   for (let i = blocks.length - 1; i >= 0; i--) {
@@ -284,8 +302,10 @@ function encrypt(data, passphrase) {
 }
 
 function decrypt(blocks, passphrase) {
+  // Keys aus Passwort erzeugen
   key.init(passphrase);
 
+  // Rückwärts entschlüsseln mit CBC
   let delayed = 0n;
   key.work = key.downKey;
   let feedback = sqrt5;
@@ -296,6 +316,7 @@ function decrypt(blocks, passphrase) {
     feedback = delayed;
   }
 
+  // Vorwärts entschlüsseln mit CBC
   key.work = key.upKey;
   feedback = sqrt5;
   for (let i = 0; i < blocks.length; i++) {
@@ -305,8 +326,10 @@ function decrypt(blocks, passphrase) {
     feedback = delayed;
   }
 
+  // Random-Blocks wieder entfernen
   blocks.shift();
   blocks.pop();
+  // Binary zurückkonvertieren und ausgeben
   return blocks64BitToObj(blocks);
 }
 
@@ -314,7 +337,7 @@ function decrypt(blocks, passphrase) {
 
 const outputEl = document.getElementById("output");
 
-// support function to log to both console and output element
+// Hilfsfunktion um Console und Output zu bedienen
 function log(...args) {
   console.log(...args);
   outputEl.textContent += args.join(" ") + "\n";
@@ -322,7 +345,7 @@ function log(...args) {
 
 userInput = {};
 
-// Event listener for the "Run" button
+// Event listener für "Run" button
 document.getElementById("runBtn").addEventListener("click", () => {
   outputEl.textContent = ""; // Vor jedem Lauf resetten
 
@@ -348,5 +371,5 @@ Algorithmus komplett! + Doppelt gesalzen.
   
 Fehlt noch:
 - Datenkompression
-- neu durchkommentieren
+- ein paar zusätzliche Kommentare
 */
