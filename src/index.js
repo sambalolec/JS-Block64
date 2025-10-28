@@ -2,7 +2,7 @@
 
 /* S-Boxen optimiert (Maximin nonlinearity) mit erweiterten Nachbarschaftsoperationen */
 /* Generated: Thu Oct 23 07:40:27 2025, elapsed 55.00s, best_obj 106.0 */
-const sbox1 = [
+const SBOX_1 = [
   0x97, 0xa5, 0x5a, 0x7c, 0x62, 0x60, 0xb3, 0x1e, 0x5c, 0x57, 0x71, 0xc9, 0x36,
   0x1a, 0xc4, 0x5e, 0xfa, 0xea, 0x08, 0x3e, 0xb7, 0x3a, 0x0a, 0xab, 0x54, 0xed,
   0xd2, 0x2d, 0x72, 0xa1, 0x73, 0x22, 0x74, 0x7b, 0x6b, 0x77, 0xc2, 0x84, 0xf9,
@@ -24,9 +24,9 @@ const sbox1 = [
   0x4f, 0x3b, 0x66, 0x82, 0x9b, 0x63, 0xd6, 0xce, 0xe8, 0xec, 0x14, 0x3c, 0x18,
   0x7d, 0x6d, 0x9d, 0x34, 0xcc, 0x0c, 0xb6, 0xaa, 0x19,
 ];
-Object.freeze(sbox1);
+Object.freeze(SBOX_1);
 
-const sbox2 = [
+const SBOX_2 = [
   0xe9, 0xf0, 0xb4, 0x62, 0x35, 0xbc, 0x70, 0xaf, 0xe4, 0x83, 0x56, 0x3a, 0x40,
   0xec, 0xbb, 0xf2, 0x96, 0x32, 0xab, 0xa2, 0x6c, 0x5c, 0xff, 0x67, 0xe5, 0xa0,
   0x81, 0xee, 0x28, 0x72, 0x3d, 0x77, 0xa7, 0xe7, 0x9b, 0xde, 0x7a, 0x59, 0x4d,
@@ -48,9 +48,9 @@ const sbox2 = [
   0x98, 0xd0, 0x87, 0x36, 0xf1, 0x95, 0xc8, 0x20, 0xd7, 0xa1, 0x47, 0xb2, 0x22,
   0x00, 0x46, 0xaa, 0x02, 0x75, 0xdb, 0x4a, 0x27, 0x76,
 ];
-Object.freeze(sbox2);
+Object.freeze(SBOX_2);
 
-const sbox3 = [
+const SBOX_3 = [
   0x54, 0x99, 0x33, 0x57, 0x5f, 0x37, 0xce, 0xc5, 0x87, 0x0e, 0x27, 0xf3, 0x0b,
   0xb7, 0x5d, 0x49, 0xc1, 0x9b, 0x7f, 0x0d, 0x19, 0x8e, 0x61, 0xc4, 0x89, 0x95,
   0x66, 0x60, 0xbd, 0x8c, 0xd5, 0x94, 0x7b, 0x40, 0x58, 0xe8, 0xb6, 0x2b, 0xde,
@@ -72,9 +72,9 @@ const sbox3 = [
   0x72, 0x9d, 0x21, 0x05, 0x07, 0x50, 0x10, 0x92, 0x5c, 0x1c, 0x3a, 0xd9, 0x4e,
   0xd8, 0xa1, 0xc6, 0x4c, 0x03, 0x56, 0x8d, 0x1e, 0xe0,
 ];
-Object.freeze(sbox3);
+Object.freeze(SBOX_3);
 
-const sbox4 = [
+const SBOX_4 = [
   0x2e, 0xaa, 0x0d, 0xc8, 0x8b, 0xd2, 0x45, 0xf6, 0x41, 0xf2, 0x8d, 0x0c, 0xb9,
   0xc3, 0x62, 0x9b, 0x2c, 0x8c, 0xd9, 0xd1, 0x47, 0xc0, 0xd8, 0x1a, 0xbf, 0x5c,
   0x0f, 0x92, 0xce, 0xdb, 0x98, 0x58, 0x48, 0x9e, 0xf1, 0x2d, 0x1d, 0xe7, 0x17,
@@ -96,51 +96,51 @@ const sbox4 = [
   0x04, 0x68, 0x18, 0x9f, 0x4a, 0x8e, 0xaf, 0x15, 0x33, 0x97, 0x93, 0x60, 0x81,
   0x87, 0x73, 0x49, 0x89, 0xb2, 0x22, 0x31, 0xf3, 0xcd,
 ];
-Object.freeze(sbox4);
+Object.freeze(SBOX_4);
 
-const alphabets = [
-  [sbox1, sbox2, sbox3, sbox4],
-  [sbox1, sbox2, sbox4, sbox3],
-  [sbox1, sbox3, sbox2, sbox4],
-  [sbox1, sbox3, sbox4, sbox2],
-  [sbox1, sbox4, sbox2, sbox3],
-  [sbox1, sbox4, sbox3, sbox2],
+const ALPHABETS = [
+  [SBOX_1, SBOX_2, SBOX_3, SBOX_4],
+  [SBOX_1, SBOX_2, SBOX_4, SBOX_3],
+  [SBOX_1, SBOX_3, SBOX_2, SBOX_4],
+  [SBOX_1, SBOX_3, SBOX_4, SBOX_2],
+  [SBOX_1, SBOX_4, SBOX_2, SBOX_3],
+  [SBOX_1, SBOX_4, SBOX_3, SBOX_2],
 
-  [sbox2, sbox1, sbox3, sbox4],
-  [sbox2, sbox1, sbox4, sbox3],
-  [sbox2, sbox3, sbox1, sbox4],
-  [sbox2, sbox3, sbox4, sbox1],
-  [sbox2, sbox4, sbox1, sbox3],
-  [sbox2, sbox4, sbox3, sbox1],
+  [SBOX_2, SBOX_1, SBOX_3, SBOX_4],
+  [SBOX_2, SBOX_1, SBOX_4, SBOX_3],
+  [SBOX_2, SBOX_3, SBOX_1, SBOX_4],
+  [SBOX_2, SBOX_3, SBOX_4, SBOX_1],
+  [SBOX_2, SBOX_4, SBOX_1, SBOX_3],
+  [SBOX_2, SBOX_4, SBOX_3, SBOX_1],
 
-  [sbox3, sbox1, sbox2, sbox4],
-  [sbox3, sbox1, sbox4, sbox2],
-  [sbox3, sbox2, sbox1, sbox4],
-  [sbox3, sbox2, sbox4, sbox1],
-  [sbox3, sbox4, sbox1, sbox2],
-  [sbox3, sbox4, sbox2, sbox1],
+  [SBOX_3, SBOX_1, SBOX_2, SBOX_4],
+  [SBOX_3, SBOX_1, SBOX_4, SBOX_2],
+  [SBOX_3, SBOX_2, SBOX_1, SBOX_4],
+  [SBOX_3, SBOX_2, SBOX_4, SBOX_1],
+  [SBOX_3, SBOX_4, SBOX_1, SBOX_2],
+  [SBOX_3, SBOX_4, SBOX_2, SBOX_1],
 
-  [sbox4, sbox1, sbox2, sbox3],
-  [sbox4, sbox1, sbox3, sbox2],
-  [sbox4, sbox2, sbox1, sbox3],
-  [sbox4, sbox2, sbox3, sbox1],
-  [sbox4, sbox3, sbox1, sbox2],
-  [sbox4, sbox3, sbox2, sbox1],
+  [SBOX_4, SBOX_1, SBOX_2, SBOX_3],
+  [SBOX_4, SBOX_1, SBOX_3, SBOX_2],
+  [SBOX_4, SBOX_2, SBOX_1, SBOX_3],
+  [SBOX_4, SBOX_2, SBOX_3, SBOX_1],
+  [SBOX_4, SBOX_3, SBOX_1, SBOX_2],
+  [SBOX_4, SBOX_3, SBOX_2, SBOX_1],
 ];
-Object.freeze(alphabets);
+Object.freeze(ALPHABETS);
 
 // Irrationale Zahlen für die bunte Mischung
-const knuthConst = 0x9e3779b97f4a7c15n;
-const sqrt2 = 0x6a09e667f3bcc909n;
-const sqrt3 = 0xbb67ae8584caa73bn;
-const sqrt5 = 0x8b988befb3b3a0a3n;
-const pi = 0x3243f6a8885a308dn;
-const logNat = 0x45f306dc9c883afdn;
-const ln2 = 0xb17217f7d1cf79abn;
+const KNUTH = 0x9e3779b97f4a7c15n;
+const SQRT2 = 0x6a09e667f3bcc909n;
+const SQRT3 = 0xbb67ae8584caa73bn;
+const SQRT5 = 0x8b988befb3b3a0a3n;
+const PI = 0x3243f6a8885a308dn;
+const LOGNAT = 0x45f306dc9c883afdn;
+const LN2 = 0xb17217f7d1cf79abn;
 
 // Konstanten um weniger zu tippen und um Fehler zu vermeiden
-const mask64 = 0xffffffffffffffffn;
-const mask32 = 0xffffffffn;
+const MASK64 = 0xffffffffffffffffn;
+const MASK32 = 0xffffffffn;
 
 //**************************************  Utility Functions  **************************************//
 
@@ -197,8 +197,8 @@ function blocks64BitToObj(blocks) {
   // 64-Bit Blöcke zurück in Bytes umwandeln
   for (const block of blocks) {
     // 8 Bytes pro Block (Little-Endian)
-    for (let j = 0; j < 8; j++) {
-      const byte = Number((block >> BigInt(8 * j)) & 0xffn);
+    for (let i = 0; i < 8; i++) {
+      const byte = Number((block >> BigInt(8 * i)) & 0xffn);
       bytes.push(byte);
     }
   }
@@ -215,7 +215,7 @@ function blocks64BitToObj(blocks) {
 
 //**************************************  Core Functions  **************************************//
 
-class keyClass {
+class Key {
   #work = 0n; // Arbeitsschlüssel, wird für jeden einzelnen Block upgedatet
   #seed0 = 0n; // Seeds dito
   #seed1 = 0n; // Alles dreht sich, alles bewegt sich
@@ -224,19 +224,19 @@ class keyClass {
   // ... die mathematisch praktisch nix miteinander zu tun haben sollten
   init(passphrase = "xxx") {
     // Mit krummen Werten Initialisieren
-    this.#seed0 = sqrt2;
-    this.#seed1 = sqrt3;
+    this.#seed0 = SQRT2;
+    this.#seed1 = SQRT3;
     // Passwort in Bytes konvertieren, auf mindestens 3 Blöcke (192 Bit) verlängern
     // ... und den ersten Block aufregender gestalten
     let passBlocks = objectTo64BitBlocks(passphrase);
-    passBlocks.push(logNat, ln2);
-    passBlocks[0] = (passBlocks[0] * knuthConst) & mask64;
+    passBlocks.push(LOGNAT, LN2);
+    passBlocks[0] = (passBlocks[0] * KNUTH) & MASK64;
 
     // Passwortblöcke miteinander verwursteln
-    let feedback = pi;
+    let feedback = PI;
     const createKey = (blocks) => {
       blocks.forEach((block, i) => {
-        blocks[i] = feistel((block + feedback) & mask64);
+        blocks[i] = feistel((block + feedback) & MASK64, this.newValue);
         feedback = blocks[i];
       });
       return blocks;
@@ -248,10 +248,10 @@ class keyClass {
       createKey(passBlocks);
       this.#seed1 ^= passBlocks[passBlocks.length - 1];
     }
-    this.value;
+    this.newValue;
   }
   // Für jeden neuen Block frischen Key generieren mit XorShift128+
-  get value() {
+  get newValue() {
     let s0 = this.#seed0;
     const s1 = this.#seed1;
     this.#seed0 = s1;
@@ -260,12 +260,16 @@ class keyClass {
     s0 ^= s1;
     s0 ^= s1 >> 26n;
     this.#seed1 = s0;
-    this.work = (this.#seed1 + this.#seed0) & mask64;
+    this.work = (this.#seed1 + this.#seed0) & MASK64;
     return this.#work;
   }
 }
 
-function S_Box(uint32) {
+function s_Box(uint32) {
+  // Mit dem Hash das Alphabet festlegen
+  const shuffle = knuthHash(uint32);
+  const sboxes = ALPHABETS[shuffle];
+
   // 32 Bit Input in 4 Blöcke zu je 8 Bit zerlegen
   const bytes = [
     uint32 & 0xff,
@@ -274,10 +278,7 @@ function S_Box(uint32) {
     (uint32 >>> 24) & 0xff,
   ];
 
-  // Nichtlineare Substitution: Mit dem Hash das Alphabet festlegen und anwenden
-  const shuffle = knuthHash(uint32);
-  const sboxes = alphabets[shuffle];
-
+  // Nichtlineare Substitution durch die Werte in den dicken S-Boxen
   const [v0, v1, v2, v3] = bytes.map((byte, i) => sboxes[i][byte] & 0xff);
 
   // Die 8-Bit Blöcke wieder zu einer 32-Bit Zahl kombinieren und mixen
@@ -287,24 +288,25 @@ function S_Box(uint32) {
 }
 
 function feistel(block, blockKey = 0n) {
-  const rounds = 5;
+  const rounds = 5; // hier nur 5 Runden pro Block, weil doppelt durchlaufen => 10 Runden
 
-  let data = block ^ blockKey;
+  const data = block ^ blockKey;
+
   // 64-Bit BigInt in linke und rechte Hälfte zerlegen
-  let left = Number(data & mask32) >>> 0;
-  let right = Number((data >> 32n) & mask32) >>> 0;
+  let left = Number(data & MASK32) >>> 0;
+  let right = Number((data >> 32n) & MASK32) >>> 0;
 
   // Durchnudeln
   for (let r = 0; r < rounds; r++) {
     const newLeft = right;
-    const newRight = left ^ S_Box(right);
+    const newRight = left ^ s_Box(right);
     left = newLeft;
     right = newRight;
   }
 
   // Die beiden Hälften rekombinieren
-  let out = BigInt(right) & mask32;
-  out |= (BigInt(left) & mask32) << 32n;
+  let out = BigInt(right) & MASK32;
+  out |= (BigInt(left) & MASK32) << 32n;
 
   // Erneut mit Blockkey verXodern und zurück geben
   return out ^ blockKey;
@@ -320,23 +322,23 @@ function encrypt(data, passphrase) {
   IV = random64();
   blocks.push(IV);
 
-  const key = new keyClass();
+  const SessionKey = new Key();
 
   // Aufwärts verschlüsseln mit CBC
-  key.init(passphrase + "up");
-  let feedback = sqrt5;
+  SessionKey.init(passphrase + "up");
+  let feedback = SQRT5;
   for (let i = 0; i < blocks.length; i++) {
     blocks[i] ^= feedback;
-    blocks[i] = feistel(blocks[i], key.value);
+    blocks[i] = feistel(blocks[i], SessionKey.newValue);
     feedback = blocks[i];
   }
 
   // Rückwärts verschlüsseln mit CBC
-  key.init(passphrase + "down");
-  feedback = sqrt5;
+  SessionKey.init(passphrase + "down");
+  feedback = SQRT5;
   for (let i = blocks.length - 1; i >= 0; i--) {
     blocks[i] ^= feedback;
-    blocks[i] = feistel(blocks[i], key.value);
+    blocks[i] = feistel(blocks[i], SessionKey.newValue);
     feedback = blocks[i];
   }
 
@@ -344,25 +346,25 @@ function encrypt(data, passphrase) {
 }
 
 function decrypt(blocks, passphrase) {
-  const key = new keyClass();
+  const SessionKey = new Key();
 
   // Rückwärts entschlüsseln mit CBC
-  key.init(passphrase + "down");
+  SessionKey.init(passphrase + "down");
   let delayed = 0n;
-  let feedback = sqrt5;
+  let feedback = SQRT5;
   for (let i = blocks.length - 1; i >= 0; i--) {
     delayed = blocks[i];
-    blocks[i] = feistel(blocks[i], key.value);
+    blocks[i] = feistel(blocks[i], SessionKey.newValue);
     blocks[i] ^= feedback;
     feedback = delayed;
   }
 
   // Vorwärts entschlüsseln mit CBC
-  key.init(passphrase + "up");
-  feedback = sqrt5;
+  SessionKey.init(passphrase + "up");
+  feedback = SQRT5;
   for (let i = 0; i < blocks.length; i++) {
     delayed = blocks[i];
-    blocks[i] = feistel(blocks[i], key.value);
+    blocks[i] = feistel(blocks[i], SessionKey.newValue);
     blocks[i] ^= feedback;
     feedback = delayed;
   }
@@ -417,7 +419,9 @@ document.getElementById("runBtn").addEventListener("click", () => {
 //**************************************  To Do List  **************************************//
 
 /* 
-Mehr Leben in die S_box gebracht.
+News: Key als Klasse gebaut und so bessere Datenkapselung ermöglicht.
+Lesbarkeit stellenweise verbessert.
+
 Fehlt noch:
 - Datenkompression; JSON.stringify bläst die Datenstruktur ungemein auf
 */
