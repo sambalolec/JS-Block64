@@ -2,8 +2,8 @@
 
 // Kryptofunktionen einbinden
 const CryptoAPI = document.createElement("script");
-CryptoAPI.src = "crypto.js";
-document.head.appendChild(CryptoAPI);
+CryptoAPI.src = "./src/crypto.js";
+document.body.appendChild(CryptoAPI);
 
 //**************************************  UI and Interaction  **************************************//
 

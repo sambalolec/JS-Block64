@@ -1,3 +1,10 @@
+//**************************************  Imports  **************************************//
+
+// Globale Konstanten laden
+const GlobalConst = document.createElement("script");
+GlobalConst.src = "./src/constants.js";
+document.body.appendChild(GlobalConst);
+
 //**************************************  Utility Functions  **************************************//
 
 // ROL und ROR, in JS schmerzlich vermisst
@@ -174,7 +181,7 @@ class Key {
   }
 }
 
-//**************************************  High-Level Functions  **************************************//
+//**************************************  API  **************************************//
 
 function encrypt(data, passphrase) {
   // Input in Binary umwandeln und in Random-Blocks kapseln
@@ -238,12 +245,7 @@ function decrypt(blocks, passphrase) {
   return blocks64BitToObj(blocks);
 }
 
-//**************************************  Imports  **************************************//
-
-// Globale Konstanten laden
-const GlobalConst = document.createElement("script");
-GlobalConst.src = "constants.js";
-document.head.appendChild(GlobalConst);
+//************************************************************************************** */
 
 /* 
 News: Key als Klasse gebaut und so bessere Datenkapselung ermöglicht.
