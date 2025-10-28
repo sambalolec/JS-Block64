@@ -129,7 +129,7 @@ const alphabets = [
 ];
 Object.freeze(alphabets);
 
-// Irrationale Zahlen *2^64 für die bunte Mischung
+// Irrationale Zahlen für die bunte Mischung
 const knuthConst = 0x9e3779b97f4a7c15n;
 const sqrt2 = 0x6a09e667f3bcc909n;
 const sqrt3 = 0xbb67ae8584caa73bn;
@@ -215,18 +215,17 @@ function blocks64BitToObj(blocks) {
 
 //**************************************  Core Functions  **************************************//
 
-// Das Key-Objekt
-const key = {
-  work: 0n, // Arbeitsschlüssel, wird für jeden einzelnen Block upgedatet
-  seed0: 0n, // Seeds dito
-  seed1: 0n, // Alles dreht sich, alles bewegt sich
+class keyClass {
+  #work = 0n; // Arbeitsschlüssel, wird für jeden einzelnen Block upgedatet
+  #seed0 = 0n; // Seeds dito
+  #seed1 = 0n; // Alles dreht sich, alles bewegt sich
 
   // aus dem Passwort zwei 64 Bit Seeds erzeugen,
   // ... die mathematisch praktisch nix miteinander zu tun haben sollten
-  init(passphrase) {
+  init(passphrase = "xxx") {
     // Mit krummen Werten Initialisieren
-    this.seed0 = sqrt2;
-    this.seed1 = sqrt3;
+    this.#seed0 = sqrt2;
+    this.#seed1 = sqrt3;
     // Passwort in Bytes konvertieren, auf mindestens 3 Blöcke (192 Bit) verlängern
     // ... und den ersten Block aufregender gestalten
     let passBlocks = objectTo64BitBlocks(passphrase);
@@ -245,25 +244,26 @@ const key = {
     // Neue Seeds aus Passwortblöcken möglichst schrullig berechnen
     for (let i = 0; i < 3; i++) {
       createKey(passBlocks);
-      this.seed0 ^= passBlocks[passBlocks.length - 1];
+      this.#seed0 ^= passBlocks[passBlocks.length - 1];
       createKey(passBlocks);
-      this.seed1 ^= passBlocks[passBlocks.length - 1];
+      this.#seed1 ^= passBlocks[passBlocks.length - 1];
     }
-    this.update();
-  },
+    this.value;
+  }
   // Für jeden neuen Block frischen Key generieren mit XorShift128+
-  update() {
-    let s0 = this.seed0;
-    const s1 = this.seed1;
-    this.seed0 = s1;
+  get value() {
+    let s0 = this.#seed0;
+    const s1 = this.#seed1;
+    this.#seed0 = s1;
     s0 ^= s0 << 23n;
     s0 ^= s0 >> 17n;
     s0 ^= s1;
     s0 ^= s1 >> 26n;
-    this.seed1 = s0;
-    this.work = (this.seed1 + this.seed0) & mask64;
-  },
-};
+    this.#seed1 = s0;
+    this.work = (this.#seed1 + this.#seed0) & mask64;
+    return this.#work;
+  }
+}
 
 function S_Box(uint32) {
   // 32 Bit Input in 4 Blöcke zu je 8 Bit zerlegen
@@ -276,7 +276,7 @@ function S_Box(uint32) {
 
   // Nichtlineare Substitution: Mit dem Hash das Alphabet festlegen und anwenden
   const shuffle = knuthHash(uint32);
-  let sboxes = alphabets[shuffle];
+  const sboxes = alphabets[shuffle];
 
   const [v0, v1, v2, v3] = bytes.map((byte, i) => sboxes[i][byte] & 0xff);
 
@@ -286,12 +286,10 @@ function S_Box(uint32) {
   return merged;
 }
 
-function feistel(block) {
+function feistel(block, blockKey = 0n) {
   const rounds = 5;
 
-  // Frischen Blockkey erstellen und Input damit verXodern
-  key.update();
-  let data = block ^ key.work;
+  let data = block ^ blockKey;
   // 64-Bit BigInt in linke und rechte Hälfte zerlegen
   let left = Number(data & mask32) >>> 0;
   let right = Number((data >> 32n) & mask32) >>> 0;
@@ -309,7 +307,7 @@ function feistel(block) {
   out |= (BigInt(left) & mask32) << 32n;
 
   // Erneut mit Blockkey verXodern und zurück geben
-  return out ^ key.work;
+  return out ^ blockKey;
 }
 
 //**************************************  High-Level Functions  **************************************//
@@ -322,12 +320,14 @@ function encrypt(data, passphrase) {
   IV = random64();
   blocks.push(IV);
 
+  const key = new keyClass();
+
   // Aufwärts verschlüsseln mit CBC
   key.init(passphrase + "up");
   let feedback = sqrt5;
   for (let i = 0; i < blocks.length; i++) {
     blocks[i] ^= feedback;
-    blocks[i] = feistel(blocks[i]);
+    blocks[i] = feistel(blocks[i], key.value);
     feedback = blocks[i];
   }
 
@@ -336,7 +336,7 @@ function encrypt(data, passphrase) {
   feedback = sqrt5;
   for (let i = blocks.length - 1; i >= 0; i--) {
     blocks[i] ^= feedback;
-    blocks[i] = feistel(blocks[i]);
+    blocks[i] = feistel(blocks[i], key.value);
     feedback = blocks[i];
   }
 
@@ -344,13 +344,15 @@ function encrypt(data, passphrase) {
 }
 
 function decrypt(blocks, passphrase) {
+  const key = new keyClass();
+
   // Rückwärts entschlüsseln mit CBC
   key.init(passphrase + "down");
   let delayed = 0n;
   let feedback = sqrt5;
   for (let i = blocks.length - 1; i >= 0; i--) {
     delayed = blocks[i];
-    blocks[i] = feistel(blocks[i]);
+    blocks[i] = feistel(blocks[i], key.value);
     blocks[i] ^= feedback;
     feedback = delayed;
   }
@@ -360,7 +362,7 @@ function decrypt(blocks, passphrase) {
   feedback = sqrt5;
   for (let i = 0; i < blocks.length; i++) {
     delayed = blocks[i];
-    blocks[i] = feistel(blocks[i]);
+    blocks[i] = feistel(blocks[i], key.value);
     blocks[i] ^= feedback;
     feedback = delayed;
   }
@@ -371,6 +373,8 @@ function decrypt(blocks, passphrase) {
   // Binary zurückkonvertieren und ausgeben
   return blocks64BitToObj(blocks);
 }
+
+//***************************************** Gamingzone **********************************************//
 
 //**************************************  UI and Interaction  **************************************//
 
