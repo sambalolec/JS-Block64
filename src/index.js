@@ -177,7 +177,7 @@ function objectTo64BitBlocks(obj) {
   const bytes = encoder.encode(JSON.stringify(obj));
 
   // Uint8Array in 64-Bit Blöcke aufteilen, padden und in BigInt umwandeln
-  const blockCount = (bytes.length + 7) >> 3; // schnelles aufrunden auf nächstes Vielfaches von 8 (Assemblertrick)
+  const blockCount = (bytes.length + 7) >> 3; // schnelles Aufrunden auf nächstes Vielfaches von 8 (Assemblertrick)
   const blocks = new Array(blockCount);
   for (let i = 0; i < blockCount; i++) {
     let block = 0n;
@@ -215,60 +215,10 @@ function blocks64BitToObj(blocks) {
 
 //**************************************  Core Functions  **************************************//
 
-class Key {
-  #work = 0n; // Arbeitsschlüssel, wird für jeden einzelnen Block upgedatet
-  #seed0 = 0n; // Seeds dito
-  #seed1 = 0n; // Alles dreht sich, alles bewegt sich
-
-  // aus dem Passwort zwei 64 Bit Seeds erzeugen,
-  // ... die mathematisch praktisch nix miteinander zu tun haben sollten
-  init(passphrase = "xxx") {
-    // Mit krummen Werten Initialisieren
-    this.#seed0 = SQRT2;
-    this.#seed1 = SQRT3;
-    // Passwort in Bytes konvertieren, auf mindestens 3 Blöcke (192 Bit) verlängern
-    // ... und den ersten Block aufregender gestalten
-    let passBlocks = objectTo64BitBlocks(passphrase);
-    passBlocks.push(LOGNAT, LN2);
-    passBlocks[0] = (passBlocks[0] * KNUTH) & MASK64;
-
-    // Passwortblöcke miteinander verwursteln
-    let feedback = PI;
-    const createKey = (blocks) => {
-      blocks.forEach((block, i) => {
-        blocks[i] = feistel((block + feedback) & MASK64, this.newValue);
-        feedback = blocks[i];
-      });
-      return blocks;
-    };
-    // Neue Seeds aus Passwortblöcken möglichst schrullig berechnen
-    for (let i = 0; i < 3; i++) {
-      createKey(passBlocks);
-      this.#seed0 ^= passBlocks[passBlocks.length - 1];
-      createKey(passBlocks);
-      this.#seed1 ^= passBlocks[passBlocks.length - 1];
-    }
-    this.newValue;
-  }
-  // Für jeden neuen Block frischen Key generieren mit XorShift128+
-  get newValue() {
-    let s0 = this.#seed0;
-    const s1 = this.#seed1;
-    this.#seed0 = s1;
-    s0 ^= s0 << 23n;
-    s0 ^= s0 >> 17n;
-    s0 ^= s1;
-    s0 ^= s1 >> 26n;
-    this.#seed1 = s0;
-    this.work = (this.#seed1 + this.#seed0) & MASK64;
-    return this.#work;
-  }
-}
-
 function s_Box(uint32) {
   // Mit dem Hash das Alphabet festlegen
-  const shuffle = knuthHash(uint32);
-  const sboxes = ALPHABETS[shuffle];
+  const hash = knuthHash(uint32);
+  const sboxes = ALPHABETS[hash];
 
   // 32 Bit Input in 4 Blöcke zu je 8 Bit zerlegen
   const bytes = [
@@ -281,22 +231,22 @@ function s_Box(uint32) {
   // Nichtlineare Substitution durch die Werte in den dicken S-Boxen
   const [v0, v1, v2, v3] = bytes.map((byte, i) => sboxes[i][byte] & 0xff);
 
-  // Die 8-Bit Blöcke wieder zu einer 32-Bit Zahl kombinieren und mixen
+  // Die Bytes wieder zu einer 32-Bit Zahl kombinieren und mixen
   const tmp = (v0 | (v1 << 8) | (v2 << 16) | (v3 << 24)) >>> 0;
   const merged = (tmp + rol32(tmp, 10) + ror32(tmp, 11)) >>> 0;
   return merged;
 }
 
-function feistel(block, blockKey = 0n) {
-  const rounds = 5; // hier nur 5 Runden pro Block, weil doppelt durchlaufen => 10 Runden
+function feistel(block, key = 0n) {
+  const rounds = 5; // hier nur 5 Runden pro Block, weil doppelt durchlaufen => min. 10 Runden
 
-  const data = block ^ blockKey;
+  const data = block ^ key;
 
   // 64-Bit BigInt in linke und rechte Hälfte zerlegen
   let left = Number(data & MASK32) >>> 0;
   let right = Number((data >> 32n) & MASK32) >>> 0;
 
-  // Durchnudeln
+  // Beide Hälften durchnudeln
   for (let r = 0; r < rounds; r++) {
     const newLeft = right;
     const newRight = left ^ s_Box(right);
@@ -309,7 +259,63 @@ function feistel(block, blockKey = 0n) {
   out |= (BigInt(left) & MASK32) << 32n;
 
   // Erneut mit Blockkey verXodern und zurück geben
-  return out ^ blockKey;
+  return out ^ key;
+}
+
+//**************************************  Keymanagement  **************************************//
+
+class Key {
+  #work = 0n;
+  #seed0 = 0n;
+  #seed1 = 0n;
+
+  // aus dem Passwort zwei 64 Bit Seeds erzeugen,
+  // ... die mathematisch praktisch nix miteinander zu tun haben sollten
+  init(passphrase) {
+    // Mit krummen Werten initialisieren
+    this.#seed0 = SQRT2;
+    this.#seed1 = SQRT3;
+
+    // Passwort in Blöcke zu je 64 Bit konvertieren,
+    // ... auf mindestens 3 Blöcke (192 Bit) verlängern und verschmieren
+    let passBlocks = objectTo64BitBlocks(passphrase);
+    passBlocks.push(LOGNAT, LN2);
+    passBlocks[0] = (passBlocks[0] * KNUTH) & MASK64;
+    passBlocks[1] = (passBlocks[1] * (passBlocks[0] | 1n)) & MASK64;
+    passBlocks[2] = (passBlocks[2] * (passBlocks[1] | 1n)) & MASK64;
+
+    // Alle Blöcke miteinander verknüpfen
+    let feedback = PI;
+    const passCrypt = (blocks) => {
+      blocks.forEach((block, i) => {
+        blocks[i] = feistel((block + feedback) & MASK64, this.newValue);
+        feedback = blocks[i];
+      });
+      return blocks;
+    };
+
+    // Seeds für den XorShift aus Passwortblöcken ableiten
+    for (let i = 0; i < 3; i++) {
+      passCrypt(passBlocks);
+      this.#seed0 ^= passBlocks[passBlocks.length - 1];
+      passCrypt(passBlocks);
+      this.#seed1 ^= passBlocks[passBlocks.length - 1];
+    }
+  }
+
+  // Bei jedem Aufruf einen frischen Key generieren mit XorShift128+
+  get newValue() {
+    let s0 = this.#seed0;
+    const s1 = this.#seed1;
+    this.#seed0 = s1;
+    s0 ^= s0 << 23n;
+    s0 ^= s0 >> 17n;
+    s0 ^= s1;
+    s0 ^= s1 >> 26n;
+    this.#seed1 = s0;
+    this.#work = (this.#seed1 + this.#seed0) & MASK64;
+    return this.#work;
+  }
 }
 
 //**************************************  High-Level Functions  **************************************//
