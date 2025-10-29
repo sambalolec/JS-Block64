@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1400" viewBox="0 0 1000 1400">
+  <style>
+    .box { fill:#ffffff; stroke:#222; stroke-width:2; rx:6; }
+    .title { font: bold 16px "Segoe UI", Roboto, Arial, sans-serif; fill:#111; }
+    .label { font: 14px "Segoe UI", Roboto, Arial, sans-serif; fill:#111; }
+    .small { font: 12px "Segoe UI", Roboto, Arial, sans-serif; fill:#111; }
+    .module { fill:#f4f7fb; stroke:#1f5fa4; stroke-width:2; rx:8; }
+    .divider { stroke:#bbb; stroke-width:1; }
+  </style>
+
+  <!-- Page title -->
+  <text x="28" y="34" class="title">Struktogramm — JS-Kryptosystem (modular)</text>
+
+  <!-- Main container -->
+  <g transform="translate(20,60)">
+
+    <!-- Imports & Konstanten -->
+    <g transform="translate(0,0)">
+      <rect class="module" x="0" y="0" width="960" height="72"/>
+      <text x="18" y="28" class="title">Imports &amp; Konstanten</text>
+      <text x="18" y="50" class="label">constants.js laden (GlobalConst)</text>
+    </g>
+
+    <!-- Utility Functions -->
+    <g transform="translate(0,92)">
+      <rect class="module" x="0" y="0" width="960" height="170"/>
+      <text x="18" y="28" class="title">Utility Functions</text>
+
+      <!-- inner boxes -->
+      <rect class="box" x="18" y="40" width="280" height="110"/>
+      <text x="30" y="64" class="label">rol32(value, shift)</text>
+      <text x="30" y="84" class="small">→ 32-Bit links rotieren</text>
+
+      <rect class="box" x="323" y="40" width="280" height="110"/>
+      <text x="335" y="64" class="label">ror32(value, shift)</text>
+      <text x="335" y="84" class="small">→ 32-Bit rechts rotieren</text>
+
+      <rect class="box" x="628" y="40" width="310" height="50"/>
+      <text x="640" y="64" class="label">random64()</text>
+      <text x="640" y="82" class="small">→ 64-Bit Zufallswert</text>
+
+      <rect class="box" x="628" y="100" width="310" height="50"/>
+      <text x="640" y="124" class="label">knuthHash(n)</text>
+      <text x="640" y="142" class="small">→ Hash 0–23 (S-Box Auswahl)</text>
+    </g>
+
+    <!-- Converter Functions -->
+    <g transform="translate(0,280)">
+      <rect class="module" x="0" y="0" width="960" height="120"/>
+      <text x="18" y="28" class="title">Converter Functions</text>
+
+      <rect class="box" x="18" y="40" width="460" height="64"/>
+      <text x="30" y="64" class="label">objectTo64BitBlocks(obj)</text>
+      <text x="30" y="84" class="small">→ JSON → UTF-8 → 64-Bit Blöcke (Padding)</text>
+
+      <rect class="box" x="500" y="40" width="470" height="64"/>
+      <text x="512" y="64" class="label">blocks64BitToObj(blocks)</text>
+      <text x="512" y="84" class="small">→ 64-Bit Blöcke → Bytes → JSON (remove padding)</text>
+    </g>
+
+    <!-- Core Functions -->
+    <g transform="translate(0,420)">
+      <rect class="module" x="0" y="0" width="960" height="200"/>
+      <text x="18" y="28" class="title">Core Functions</text>
+
+      <rect class="box" x="18" y="40" width="460" height="140"/>
+      <text x="30" y="64" class="label">s_Box(uint32)</text>
+      <text x="30" y="86" class="small">1) Hash = knuthHash(uint32) → ALPHABETS[hash]</text>
+      <text x="30" y="104" class="small">2) 32-bit → 4 × 8bit</text>
+      <text x="30" y="122" class="small">3) Substitution via S-Boxes (v0..v3)</text>
+      <text x="30" y="140" class="small">4) Merge + mix (rol32/ror32) → return</text>
+
+      <rect class="box" x="500" y="40" width="470" height="140"/>
+      <text x="512" y="64" class="label">feistel(block, key=0n)</text>
+      <text x="512" y="86" class="small">1) data = block ⊕ key</text>
+      <text x="512" y="104" class="small">2) split → left / right (32bit)</text>
+      <text x="512" y="122" class="small">3) 5 Runden: (newLeft=right; newRight=left ⊕ s_Box(right))</text>
+      <text x="512" y="140" class="small">4) rekombinieren → out ⊕ key → return</text>
+    </g>
+
+    <!-- Key class -->
+    <g transform="translate(0,640)">
+      <rect class="module" x="0" y="0" width="960" height="220"/>
+      <text x="18" y="28" class="title">Klasse Key</text>
+
+      <rect class="box" x="18" y="40" width="920" height="72"/>
+      <text x="30" y="64" class="label">Attribute: #seed0, #seed1</text>
+      <text x="30" y="84" class="small">init(passphrase): Seeds aus Konstanten + passphrase → objectTo64BitBlocks</text>
+
+      <rect class="box" x="18" y="120" width="440" height="86"/>
+      <text x="30" y="144" class="label">init(passphrase) — Details</text>
+      <text x="30" y="162" class="small">• Padding &amp; Multiply mit Konstanten (KNUTH, LOGNAT...)</text>
+      <text x="30" y="180" class="small">• passCrypt: Feistel-basiertes Mischen → #seed0/#seed1</text>
+
+      <rect class="box" x="494" y="120" width="444" height="86"/>
+      <text x="506" y="144" class="label">get newValue()</text>
+      <text x="506" y="162" class="small">XorShift128+; update seeds; return 64-Bit Wert (MASK64)</text>
+    </g>
+
+    <!-- API: encrypt / decrypt -->
+    <g transform="translate(0,880)">
+      <rect class="module" x="0" y="0" width="960" height="240"/>
+      <text x="18" y="28" class="title">API</text>
+
+      <rect class="box" x="18" y="40" width="920" height="92"/>
+      <text x="30" y="64" class="label">encrypt(data, passphrase)</text>
+      <text x="30" y="86" class="small">1) data → blocks (objectTo64BitBlocks)</text>
+      <text x="30" y="104" class="small">2) IV vorne/hinten, SessionKey.init(passphrase + "up")</text>
+      <text x="30" y="122" class="small">3) Vorwärts CBC: for i=0..n-1: blocks[i] ^= feedback; blocks[i] = feistel(...)</text>
+
+      <rect class="box" x="18" y="144" width="920" height="80"/>
+      <text x="30" y="168" class="label">decrypt(blocks, passphrase)</text>
+      <text x="30" y="190" class="small">1) SessionKey.init(passphrase + "down") → rückwärts CBC entschlüsseln</text>
+      <text x="30" y="208" class="small">2) SessionKey.init(passphrase + "up") → vorwärts entschlüsseln → remove IVs → blocks64BitToObj</text>
+    </g>
+
+    <!-- Compression -->
+    <g transform="translate(0,1136)">
+      <rect class="module" x="0" y="0" width="960" height="96"/>
+      <text x="18" y="28" class="title">Kompression</text>
+
+      <rect class="box" x="18" y="40" width="460" height="48"/>
+      <text x="30" y="68" class="label">compressString(str)</text>
+      <text x="30" y="86" class="small">→ gzip (CompressionStream)</text>
+
+      <rect class="box" x="500" y="40" width="438" height="48"/>
+      <text x="512" y="68" class="label">decompressString(comp)</text>
+      <text x="512" y="86" class="small">→ DecompressionStream → text</text>
+    </g>
+
+    <!-- Footer / notes -->
+    <g transform="translate(0,1248)">
+      <text x="18" y="18" class="small">Hinweis: Dieses Struktogramm ist modularisiert — jede Box fasst Hauptschritte zusammen.</text>
+      <text x="18" y="36" class="small">Du kannst jede Box weiter aufgliedern (z. B. s_Box internier Schritte) für detaillierte Diagramme.</text>
+    </g>
+
+  </g>
+</svg>

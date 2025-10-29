@@ -1,6 +1,6 @@
 //**************************************  Imports  **************************************//
 
-// Globale Konstanten laden
+// Globale Konstanten (Alle in GROSSBUCHSTABEN) includen.
 const GlobalConst = document.createElement("script");
 GlobalConst.src = "./src/constants.js";
 document.body.appendChild(GlobalConst);
@@ -15,7 +15,7 @@ function ror32(value, shift) {
   return ((value >>> shift) | (value << (32 - shift))) >>> 0;
 }
 
-// Generiert 64-Bit Zufallszahlen; Für Kryptoanalyse 0n zurück geben! Sonst Ergebnis totaler Blödsinn.
+// Generiert 64-Bit Zufallszahlen; Für Kryptoanalyse 0n zurückgeben! Sonst Ergebnis totaler Blödsinn.
 function random64() {
   const arr = new Uint32Array(2);
   crypto.getRandomValues(arr);
@@ -26,7 +26,7 @@ function random64() {
   return rand;
 }
 
-// Berechnet eine Prüfsumme; Für Kryptonalyse 0 zurück geben! Sonst Ergebnis nicht korrekt.
+// Berechnet eine Prüfsumme; Für Kryptonalyse 0 zurückgeben! Sonst Ergebnis nicht korrekt.
 function knuthHash(n) {
   const x = n >>> 0;
   return (Math.imul(x, 0x9e3779b1) >>> 30) % 24;
@@ -125,10 +125,9 @@ function feistel(block, key = 0n) {
   return out ^ key;
 }
 
-//**************************************  Keymanagement  **************************************//
+//**************************************  Keygeneration  **************************************//
 
 class Key {
-  #work = 0n;
   #seed0 = 0n;
   #seed1 = 0n;
 
@@ -176,8 +175,7 @@ class Key {
     s0 ^= s1;
     s0 ^= s1 >> 26n;
     this.#seed1 = s0;
-    this.#work = (this.#seed1 + this.#seed0) & MASK64;
-    return this.#work;
+    return (this.#seed1 + this.#seed0) & MASK64;
   }
 }
 
@@ -245,12 +243,10 @@ function decrypt(blocks, passphrase) {
   return blocks64BitToObj(blocks);
 }
 
-//************************************************************************************** */
+/* ********************************************************************************************** */
 
-/* 
-News: Key als Klasse gebaut und so bessere Datenkapselung ermöglicht.
-Lesbarkeit stellenweise verbessert.
+/* ************************************* To do ************************************************
 
-Fehlt noch:
-- Datenkompression; JSON.stringify bläst die Datenstruktur ungemein auf
+- Datenkompression: JSON.stringify bläst die Datenstruktur ungemein auf
+
 */
