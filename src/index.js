@@ -5,6 +5,8 @@ const CryptoAPI = document.createElement("script");
 CryptoAPI.src = "./src/crypto.js";
 document.body.appendChild(CryptoAPI);
 
+//***************************************** Gamingzone **********************************************//
+
 //**************************************  UI and Interaction  **************************************//
 
 const output = document.getElementById("output");
