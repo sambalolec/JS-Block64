@@ -253,8 +253,9 @@ Bugfix: Hash war fehlerhaft berechnet.
 Routine jetzt überarbeitet, verbessert und in "s_Box" integriert.
 Hashwerte jetzt gleichverteilt.
 
-Lesbarkeit stellenweise verbessert.
+Lesbarkeit stellenweise verbessert, Kleinigkeiten.
 
 Fehlt noch:
 - Datenkompression; JSON.stringify bläst die Datenstruktur ungemein auf
 */
+g;
