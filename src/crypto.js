@@ -5,7 +5,7 @@ const GlobalConst = document.createElement("script");
 GlobalConst.src = "./src/constants.js";
 document.body.appendChild(GlobalConst);
 
-//**************************************  Utility Functions  **************************************//
+//**************************************  Utilities  **************************************//
 
 // ROL und ROR, in JS schmerzlich vermisst
 function rol32(value, shift) {
@@ -15,8 +15,8 @@ function ror32(value, shift) {
   return ((value >>> shift) | (value << (32 - shift))) >>> 0;
 }
 
-// Generiert 64-Bit Zufallszahlen; Für Kryptoanalyse 0n zurück geben! Sonst Ergebnis totaler Blödsinn.
-function random64() {
+// 64-Bit Zufallszahl; Für Analyse von s_Box unbedingt 0n zurück geben! Sonst Ergebnis unsinnig.
+const randomBigInt = () => {
   const arr = new Uint32Array(2);
   crypto.getRandomValues(arr);
   let rand = 0n;
@@ -24,13 +24,7 @@ function random64() {
     rand = (rand << 32n) + BigInt(word);
   }
   return rand;
-}
-
-// Berechnet eine Prüfsumme; Für Kryptonalyse 0 zurück geben! Sonst Ergebnis nicht korrekt.
-function knuthHash(n) {
-  const x = n >>> 0;
-  return (Math.imul(x, 0x9e3779b1) >>> 30) % 24;
-}
+};
 
 //**************************************  Converter Functions  **************************************//
 
@@ -79,9 +73,18 @@ function blocks64BitToObj(blocks) {
 //**************************************  Core Functions  **************************************//
 
 function s_Box(uint32) {
+  // Berechnet eine binäre Prüfsumme im Bereich b00000-b10111 (0-23)
+  const hash = (n = uint32) => {
+    let x = Math.imul(n, 0x9e3779b1) >>> 0;
+    x ^= x << 5;
+    x = x >>> 5;
+    x *= 24;
+    return x >>> 27;
+  };
+
   // Mit dem Hash das Alphabet festlegen
-  const hash = knuthHash(uint32);
-  const sboxes = ALPHABETS[hash];
+  // Für Tests und Analyse auf feste Werte zwischen 0-23 setzen!
+  const sboxes = ALPHABETS[hash()];
 
   // 32 Bit Input in 4 Blöcke zu je 8 Bit zerlegen
   const bytes = [
@@ -95,13 +98,15 @@ function s_Box(uint32) {
   const [v0, v1, v2, v3] = bytes.map((byte, i) => sboxes[i][byte] & 0xff);
 
   // Die Bytes wieder zu einer 32-Bit Zahl kombinieren und mixen
+  const rol = 10; // Experimentell
+  const ror = 11; // Experimentell
   const tmp = (v0 | (v1 << 8) | (v2 << 16) | (v3 << 24)) >>> 0;
-  const merged = (tmp + rol32(tmp, 10) + ror32(tmp, 11)) >>> 0;
+  const merged = (tmp + rol32(tmp, rol) + ror32(tmp, ror)) >>> 0;
   return merged;
 }
 
 function feistel(block, key = 0n) {
-  const rounds = 5; // hier nur 5 Runden pro Block, weil doppelt durchlaufen => min. 10 Runden
+  const rounds = 5; // Experimentell
 
   const data = block ^ key;
 
@@ -109,7 +114,7 @@ function feistel(block, key = 0n) {
   let left = Number(data & MASK32) >>> 0;
   let right = Number((data >> 32n) & MASK32) >>> 0;
 
-  // Beide Hälften durchnudeln
+  // Rock´n roll
   for (let r = 0; r < rounds; r++) {
     const newLeft = right;
     const newRight = left ^ s_Box(right);
@@ -128,7 +133,6 @@ function feistel(block, key = 0n) {
 //**************************************  Keymanagement  **************************************//
 
 class Key {
-  #work = 0n;
   #seed0 = 0n;
   #seed1 = 0n;
 
@@ -147,7 +151,7 @@ class Key {
     passBlocks[1] = (passBlocks[1] * (passBlocks[0] | 1n)) & MASK64;
     passBlocks[2] = (passBlocks[2] * (passBlocks[1] | 1n)) & MASK64;
 
-    // Alle Blöcke miteinander verknüpfen
+    // Alle Blöcke miteinander vermischen
     let feedback = PI;
     const passCrypt = (blocks) => {
       blocks.forEach((block, i) => {
@@ -157,7 +161,7 @@ class Key {
       return blocks;
     };
 
-    // Seeds für den XorShift aus Passwortblöcken ableiten
+    // Initiale Seeds für den XorShift erzeugen
     for (let i = 0; i < 3; i++) {
       passCrypt(passBlocks);
       this.#seed0 ^= passBlocks[passBlocks.length - 1];
@@ -176,22 +180,19 @@ class Key {
     s0 ^= s1;
     s0 ^= s1 >> 26n;
     this.#seed1 = s0;
-    this.#work = (this.#seed1 + this.#seed0) & MASK64;
-    return this.#work;
+    return (this.#seed1 + this.#seed0) & MASK64;
   }
 }
 
 //**************************************  API  **************************************//
 
 function encrypt(data, passphrase) {
+  const SessionKey = new Key();
+
   // Input in Binary umwandeln und in Random-Blocks kapseln
   const blocks = objectTo64BitBlocks(data);
-  let IV = random64();
-  blocks.unshift(IV);
-  IV = random64();
-  blocks.push(IV);
-
-  const SessionKey = new Key();
+  blocks.unshift(randomBigInt());
+  blocks.push(randomBigInt());
 
   // Aufwärts verschlüsseln mit CBC
   SessionKey.init(passphrase + "up");
@@ -248,7 +249,10 @@ function decrypt(blocks, passphrase) {
 //************************************************************************************** */
 
 /* 
-News: Key als Klasse gebaut und so bessere Datenkapselung ermöglicht.
+Bugfix: Hash war fehlerhaft berechnet.
+Routine jetzt überarbeitet, verbessert und in "s_Box" integriert.
+Hashwerte jetzt gleichverteilt.
+
 Lesbarkeit stellenweise verbessert.
 
 Fehlt noch:
